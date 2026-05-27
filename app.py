@@ -431,9 +431,16 @@ def shared_access(token):
                 flash('Incorrect password.', 'danger')
                 return render_template('shared_access.html', link=link, error=None, require_password=True)
             
-            # UPDATE VIEW COUNT
-            new_views = int(link['used_views']) + 1
-            execute_query("UPDATE share_links SET used_views = %s WHERE id = %s", (new_views, link['id']))
+            # ========== AUTO VIEW COUNT (FIXED) ==========
+            try:
+                current_views = int(link['used_views']) if link['used_views'] is not None else 0
+                new_views = current_views + 1
+                execute_query("UPDATE share_links SET used_views = %s WHERE id = %s", (new_views, link['id']))
+                print(f"✅ View count updated: {current_views} -> {new_views} for link {link['id']}")
+            except Exception as e:
+                print(f"❌ Error updating view count: {e}")
+            # ============================================
+            
             add_log(None, link['file_id'], 'FILE_VIEW', f'Viewed: {link["original_filename"]}', request.remote_addr)
             
             link = fetch_one("""SELECT sl.*, f.* FROM share_links sl JOIN files f ON f.id = sl.file_id WHERE sl.token = %s""", (token,))
@@ -441,9 +448,16 @@ def shared_access(token):
         else:
             return render_template('shared_access.html', link=link, error=None, require_password=True)
     
-    # NO PASSWORD - UPDATE VIEW COUNT
-    new_views = int(link['used_views']) + 1
-    execute_query("UPDATE share_links SET used_views = %s WHERE id = %s", (new_views, link['id']))
+    # ========== AUTO VIEW COUNT (FIXED) ==========
+    try:
+        current_views = int(link['used_views']) if link['used_views'] is not None else 0
+        new_views = current_views + 1
+        execute_query("UPDATE share_links SET used_views = %s WHERE id = %s", (new_views, link['id']))
+        print(f"✅ View count updated: {current_views} -> {new_views} for link {link['id']}")
+    except Exception as e:
+        print(f"❌ Error updating view count: {e}")
+    # ============================================
+    
     add_log(None, link['file_id'], 'FILE_VIEW', f'Viewed: {link["original_filename"]}', request.remote_addr)
     
     link = fetch_one("""SELECT sl.*, f.* FROM share_links sl JOIN files f ON f.id = sl.file_id WHERE sl.token = %s""", (token,))
