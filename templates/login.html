@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center align-items-center" style="min-height: 70vh;">
+    <div class="col-md-5">
+        <div class="card-modern p-4">
+            <div class="text-center mb-4">
+                <div class="mb-3">
+                    <i class="bi bi-shield-lock-fill" style="font-size: 2.5rem; color: #3b82f6;"></i>
+                </div>
+                <h2 style="font-size: 1.5rem; font-weight: 600; color: #1e293b;">Welcome Back</h2>
+                <p style="font-size: 0.875rem; color: #64748b;">Login to access your secure documents</p>
+            </div>
+            
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold" style="font-size: 0.8rem;">Email Address</label>
+                    <input type="email" name="email" class="form-control form-modern" 
+                           placeholder="admin@docguard.com" required autofocus>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="form-label fw-semibold" style="font-size: 0.8rem;">Password</label>
+                    <input type="password" name="password" class="form-control form-modern" 
+                           placeholder="••••••••" required>
+                </div>
+                
+                <button type="submit" class="btn btn-primary-custom w-100 py-2">
+                    Sign In
+                </button>
+            </form>
+            
+            <hr class="my-4" style="border-color: #eef2f6;">
+            
+            <p class="text-center mb-0" style="font-size: 0.8rem;">
+                Don't have an account? 
+                <a href="{{ url_for('register') }}" style="color: #3b82f6; text-decoration: none;">Create account</a>
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

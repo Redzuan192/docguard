@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-header">
+    <h1>Admin Dashboard</h1>
+    <p>Monitor and manage the entire system</p>
+</div>
+
+<!-- Stats Cards -->
+<div class="row g-4 mb-5">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon"><i class="bi bi-people"></i></div>
+            <div class="stat-number">{{ total_users.total }}</div>
+            <div class="stat-label">Total Users</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon"><i class="bi bi-folder"></i></div>
+            <div class="stat-number">{{ total_files.total }}</div>
+            <div class="stat-label">Total Files</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon"><i class="bi bi-link"></i></div>
+            <div class="stat-number">{{ total_links.total }}</div>
+            <div class="stat-label">Share Links</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon"><i class="bi bi-journal-text"></i></div>
+            <div class="stat-number">{{ total_logs.total }}</div>
+            <div class="stat-label">Audit Logs</div>
+        </div>
+    </div>
+</div>
+
+<div class="card-modern">
+    <div class="card-header bg-transparent border-bottom-0 pt-4 px-4">
+        <h5 class="mb-0 fw-semibold" style="font-size: 0.9rem;">Recent Activity</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table-modern mb-0">
+                <thead>
+                    <tr>
+                        <th>DATE & TIME</th>
+                        <th>USER</th>
+                        <th>FILE</th>
+                        <th>ACTION</th>
+                        <th>IP ADDRESS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in recent_logs %}
+                    <tr>
+                        <td>{{ log.created_at.strftime('%d/%m/%Y %H:%M') if log.created_at else log.created_at }}</td>
+                        <td>{% if log.full_name %}{{ log.full_name }}{% else %}<span class="text-muted">Anonymous</span>{% endif %}</td>
+                        <td>{{ log.original_filename or '-' }}</td>
+                        <td><span class="badge-inactive">{{ log.action }}</span></td>
+                        <td><code>{{ log.ip_address or '-' }}</code></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center py-4" style="color: #94a3b8;">No recent activity found</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-7">
+        <div class="card-modern">
+            <div class="card-body p-4">
+                <div class="text-center mb-4">
+                    <i class="bi bi-cloud-upload" style="font-size: 2rem; color: #3b82f6;"></i>
+                    <h2 style="font-size: 1.25rem; font-weight: 600; margin-top: 0.5rem;">Upload Document</h2>
+                    <p style="font-size: 0.8rem; color: #64748b;">Securely upload and store your files</p>
+                </div>
+                
+                <form method="POST" enctype="multipart/form-data" id="uploadForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" style="font-size: 0.8rem;">Document Title</label>
+                        <input type="text" name="title" class="form-control form-modern" 
+                               placeholder="e.g., Annual Report 2026" required>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold" style="font-size: 0.8rem;">Select File</label>
+                        <input type="file" name="document" class="form-control form-modern" 
+                               accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.png,.jpg,.jpeg" required>
+                        <small class="text-muted" style="font-size: 0.7rem;">Allowed: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, TXT, PNG, JPG, JPEG (Max 16MB)</small>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary-custom w-100 py-2" id="uploadBtn">
+                        <i class="bi bi-cloud-upload"></i> Upload File
+                        <span class="spinner-border spinner-border-sm d-none" id="uploadSpinner"></span>
+                    </button>
+                </form>
+                
+                <hr class="my-4" style="border-color: #eef2f6;">
+                
+                <div class="text-center">
+                    <a href="{{ url_for('my_files') }}" style="color: #64748b; text-decoration: none; font-size: 0.8rem;">
+                        <i class="bi bi-arrow-left"></i> Back to My Files
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('uploadForm').addEventListener('submit', function() {
+        document.getElementById('uploadBtn').disabled = true;
+        document.getElementById('uploadSpinner').classList.remove('d-none');
+    });
+</script>
+{% endblock %}

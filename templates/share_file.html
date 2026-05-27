@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-7">
+        <div class="card-modern">
+            <div class="card-body p-4">
+                <div class="text-center mb-4">
+                    <i class="bi bi-share" style="font-size: 2rem; color: #3b82f6;"></i>
+                    <h2 style="font-size: 1.25rem; font-weight: 600; margin-top: 0.5rem;">Share File</h2>
+                    <p style="font-size: 0.8rem; color: #64748b;">Create a secure shareable link</p>
+                </div>
+                
+                <div class="alert alert-light mb-4" style="background: #f8fafc; border: 1px solid #eef2f6; border-radius: 12px;">
+                    <i class="bi bi-info-circle" style="color: #3b82f6;"></i>
+                    <strong style="font-size: 0.8rem;">File:</strong> <span style="font-size: 0.8rem;">{{ file.original_filename }}</span>
+                </div>
+                
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" style="font-size: 0.8rem;">Expiry Date & Time</label>
+                        <input type="datetime-local" name="expiry_date" class="form-control form-modern" required>
+                        <small style="font-size: 0.7rem; color: #64748b;">After this date, the link will expire automatically</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" style="font-size: 0.8rem;">Maximum Views</label>
+                        <input type="number" name="max_views" class="form-control form-modern" min="1" value="5" required>
+                        <small style="font-size: 0.7rem; color: #64748b;">Link will expire after this many views</small>
+                    </div>
+
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" name="allow_download" value="1" id="allow_download">
+                        <label for="allow_download" class="form-check-label" style="font-size: 0.8rem;">Allow Download</label>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold" style="font-size: 0.8rem;">Link Password (Optional)</label>
+                        <input type="password" name="password" class="form-control form-modern" 
+                               placeholder="Leave blank for no password">
+                        <small style="font-size: 0.7rem; color: #64748b;">Recipients will need this password to access</small>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary-custom w-100 py-2">
+                        <i class="bi bi-link"></i> Generate Secure Link
+                    </button>
+                    <a href="{{ url_for('my_files') }}" class="btn btn-outline-custom w-100 mt-2">
+                        Cancel
+                    </a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-header">
+    <h1>Manage Users</h1>
+    <p>View and manage all system users</p>
+</div>
+
+<div class="card-modern">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table-modern mb-0">
+                <thead>
+                    <tr>
+                        <th>NAME</th>
+                        <th>EMAIL</th>
+                        <th>ROLE</th>
+                        <th>STATUS</th>
+                        <th>ACTION</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr {% if user.id == session.user_id %}style="background: #f8fafc;"{% endif %}>
+                        <td><strong>{{ user.full_name }}</strong>{% if user.id == session.user_id %} <span class="badge-inactive" style="font-size: 0.6rem;">You</span>{% endif %}</td>
+                        <td>{{ user.email }}</td>
+                        <td>{% if user.role == 'admin' %}<span class="badge-active" style="background: #3b82f6;">Admin</span>{% else %}<span class="badge-inactive">User</span>{% endif %}</td>
+                        <td>{% if user.is_active %}<span class="badge-active">Active</span>{% else %}<span class="badge-inactive">Inactive</span>{% endif %}</td>
+                        <td>
+                            {% if user.id != session.user_id %}
+                            <form method="POST" action="{{ url_for('toggle_user', user_id=user.id) }}" style="display: inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-outline-custom btn-sm" onclick="return confirm('Toggle user status?')">
+                                    {% if user.is_active %}Deactivate{% else %}Activate{% endif %}
+                                </button>
+                            </form>
+                            {% else %}
+                            <span class="text-muted" style="font-size: 0.7rem;">Current User</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

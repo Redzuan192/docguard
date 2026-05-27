@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-header">
+    <h1>Welcome back, {{ session.full_name }}!</h1>
+    <p>Manage and share your documents securely</p>
+</div>
+
+<!-- Stats Cards -->
+<div class="row g-4 mb-5">
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-icon"><i class="bi bi-folder"></i></div>
+            <div class="stat-number">{{ stats.my_files.total }}</div>
+            <div class="stat-label">Total Files</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-icon"><i class="bi bi-link"></i></div>
+            <div class="stat-number">{{ stats.my_links.total }}</div>
+            <div class="stat-label">Share Links</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-icon"><i class="bi bi-eye"></i></div>
+            <div class="stat-number">{{ stats.my_views.total }}</div>
+            <div class="stat-label">Total Views</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card-modern">
+            <div class="card-header bg-transparent border-bottom-0 pt-4 px-4">
+                <h5 class="mb-0 fw-semibold" style="font-size: 0.9rem;">Recent Files</h5>
+            </div>
+            <div class="card-body p-4 pt-0">
+                {% if recent_files %}
+                    {% for file in recent_files %}
+                    <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom" style="border-color: #eef2f6 !important;">
+                        <div>
+                            <i class="bi bi-file-earmark-pdf me-2" style="color: #ef4444;"></i>
+                            <strong style="font-size: 0.875rem;">{{ file.title or file.original_filename }}</strong>
+                            <br>
+                            <small class="text-muted" style="font-size: 0.7rem;">{{ file.created_at.strftime('%d %b %Y') if file.created_at else 'N/A' }}</small>
+                        </div>
+                        <a href="{{ url_for('share_file', file_id=file.id) }}" class="btn btn-primary-custom btn-sm">Share</a>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-state">
+                        <i class="bi bi-folder2-open"></i>
+                        <p>No files uploaded yet</p>
+                        <a href="{{ url_for('upload_file') }}" class="btn btn-primary-custom btn-sm">Upload Now</a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-6">
+        <div class="card-modern">
+            <div class="card-header bg-transparent border-bottom-0 pt-4 px-4">
+                <h5 class="mb-0 fw-semibold" style="font-size: 0.9rem;">Recent Share Links</h5>
+            </div>
+            <div class="card-body p-4 pt-0">
+                {% if recent_links %}
+                    {% for link in recent_links %}
+                    <div class="mb-3 pb-2 border-bottom" style="border-color: #eef2f6 !important;">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <i class="bi bi-file-earmark-text me-2"></i>
+                                <strong style="font-size: 0.875rem;">{{ link.original_filename }}</strong>
+                                <br>
+                                <small class="text-muted" style="font-size: 0.7rem;">
+                                    Expires: {{ link.expiry_date.strftime('%d %b %Y') if link.expiry_date else 'N/A' }}
+                                </small>
+                            </div>
+                            {% if link.is_active %}
+                                <span class="badge-active">Active</span>
+                            {% else %}
+                                <span class="badge-inactive">Expired</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-state">
+                        <i class="bi bi-link"></i>
+                        <p>No share links created yet</p>
+                        <a href="{{ url_for('upload_file') }}" class="btn btn-primary-custom btn-sm">Upload a file first</a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

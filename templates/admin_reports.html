@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-header">
+    <h1>Reports</h1>
+    <p>System analytics and statistics</p>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card-modern">
+            <div class="card-header bg-transparent border-bottom-0 pt-4 px-4">
+                <h5 class="mb-0 fw-semibold" style="font-size: 0.9rem;">Most Viewed Files</h5>
+            </div>
+            <div class="card-body p-0">
+                {% if top_files %}
+                <div class="list-group list-group-flush">
+                    {% for row in top_files %}
+                    <div class="d-flex justify-content-between align-items-center p-3 border-bottom" style="border-color: #eef2f6;">
+                        <div><i class="bi bi-file-earmark-pdf me-2" style="color: #ef4444;"></i> {{ row.original_filename }}</div>
+                        <span class="badge-active">{{ row.total_views }} views</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty-state"><i class="bi bi-bar-chart"></i><p>No data available</p></div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card-modern">
+            <div class="card-header bg-transparent border-bottom-0 pt-4 px-4">
+                <h5 class="mb-0 fw-semibold" style="font-size: 0.9rem;">Action Summary</h5>
+            </div>
+            <div class="card-body p-0">
+                {% if action_stats %}
+                <div class="list-group list-group-flush">
+                    {% for row in action_stats %}
+                    <div class="d-flex justify-content-between align-items-center p-3 border-bottom" style="border-color: #eef2f6;">
+                        <div>{{ row.action }}</div>
+                        <span class="badge-active">{{ row.total }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty-state"><i class="bi bi-bar-chart"></i><p>No data available</p></div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

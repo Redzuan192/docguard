@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="page-header mb-0">
+        <h1>Audit Logs</h1>
+        <p>Track all system activities</p>
+    </div>
+    <a href="{{ url_for('export_logs', keyword=keyword, action=action) }}" class="btn btn-primary-custom">
+        <i class="bi bi-download"></i> Export CSV
+    </a>
+</div>
+
+<!-- Filter Card -->
+<div class="card-modern mb-4">
+    <div class="card-body p-4">
+        <form method="GET" class="row g-3">
+            <div class="col-md-5">
+                <label class="form-label fw-semibold" style="font-size: 0.75rem;">SEARCH</label>
+                <input type="text" name="keyword" value="{{ keyword }}" class="form-control form-modern" 
+                       placeholder="User, file, or description...">
+            </div>
+            
+            <div class="col-md-4">
+                <label class="form-label fw-semibold" style="font-size: 0.75rem;">ACTION</label>
+                <select name="action" class="form-select form-modern">
+                    <option value="">All Actions</option>
+                    <option value="LOGIN_SUCCESS" {% if action == 'LOGIN_SUCCESS' %}selected{% endif %}>LOGIN_SUCCESS</option>
+                    <option value="LOGIN_FAILED" {% if action == 'LOGIN_FAILED' %}selected{% endif %}>LOGIN_FAILED</option>
+                    <option value="LOGOUT" {% if action == 'LOGOUT' %}selected{% endif %}>LOGOUT</option>
+                    <option value="FILE_UPLOAD" {% if action == 'FILE_UPLOAD' %}selected{% endif %}>FILE_UPLOAD</option>
+                    <option value="FILE_DELETE" {% if action == 'FILE_DELETE' %}selected{% endif %}>FILE_DELETE</option>
+                    <option value="FILE_VIEW" {% if action == 'FILE_VIEW' %}selected{% endif %}>FILE_VIEW</option>
+                    <option value="FILE_DOWNLOAD" {% if action == 'FILE_DOWNLOAD' %}selected{% endif %}>FILE_DOWNLOAD</option>
+                    <option value="LINK_CREATED" {% if action == 'LINK_CREATED' %}selected{% endif %}>LINK_CREATED</option>
+                    <option value="LINK_EDITED" {% if action == 'LINK_EDITED' %}selected{% endif %}>LINK_EDITED</option>
+                </select>
+            </div>
+            
+            <div class="col-md-3 d-flex align-items-end">
+                <div class="d-grid gap-2 w-100">
+                    <button type="submit" class="btn btn-primary-custom">Apply Filters</button>
+                    <a href="{{ url_for('admin_logs') }}" class="btn btn-outline-custom">Reset</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Logs Table -->
+<div class="card-modern">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table-modern mb-0">
+                <thead>
+                    <tr>
+                        <th>DATE & TIME</th>
+                        <th>USER</th>
+                        <th>FILE</th>
+                        <th>ACTION</th>
+                        <th>DESCRIPTION</th>
+                        <th>IP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td style="white-space: nowrap;">{{ log.created_at.strftime('%d/%m/%Y %H:%M:%S') if log.created_at else log.created_at }}</td>
+                        <td>{% if log.full_name %}{{ log.full_name }}{% else %}<span class="text-muted">Anonymous</span>{% endif %}</td>
+                        <td>{{ log.original_filename or '-' }}</td>
+                        <td><span class="badge-inactive">{{ log.action }}</span></td>
+                        <td>{{ log.description }}</td>
+                        <td><code>{{ log.ip_address or '-' }}</code></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center py-4" style="color: #94a3b8;">No logs found</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
