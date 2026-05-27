@@ -125,7 +125,20 @@ def execute_query(query, params=None):
     try:
         cursor.execute(query, params or ())
         conn.commit()
-        return cursor.lastrowid if hasattr(cursor, 'lastrowid') else None
+        
+        # Try to get last inserted id for PostgreSQL with RETURNING
+        if 'RETURNING' in query.upper():
+            try:
+                result = cursor.fetchone()
+                if result:
+                    return result[0] if isinstance(result, tuple) else result.get('id')
+            except:
+                pass
+        
+        # For MySQL
+        if hasattr(cursor, 'lastrowid'):
+            return cursor.lastrowid
+        return None
     finally:
         cursor.close()
         conn.close()
@@ -150,10 +163,17 @@ def is_admin():
     return session.get('role') == 'admin'
 
 def add_log(user_id, file_id, action, description, ip_address):
-    execute_query(
-        "INSERT INTO audit_logs (user_id, file_id, action, description, ip_address) VALUES (%s, %s, %s, %s, %s)",
-        (user_id, file_id, action, description, ip_address)
-    )
+    # Handle None values
+    if file_id is None:
+        execute_query(
+            "INSERT INTO audit_logs (user_id, file_id, action, description, ip_address) VALUES (%s, %s, %s, %s, %s)",
+            (user_id, None, action, description, ip_address)
+        )
+    else:
+        execute_query(
+            "INSERT INTO audit_logs (user_id, file_id, action, description, ip_address) VALUES (%s, %s, %s, %s, %s)",
+            (user_id, file_id, action, description, ip_address)
+        )
 
 # =====================
 # ROUTES - AUTHENTICATION
@@ -319,10 +339,18 @@ def upload_file():
         with open(file_path, 'wb') as f:
             f.write(encrypted_data)
 
-        file_id = execute_query(
-            "INSERT INTO files (title, original_filename, stored_filename, file_path, uploaded_by) VALUES (%s,%s,%s,%s,%s)",
-            (title or file.filename, file.filename, stored_filename, file_path, session['user_id'])
-        )
+        # For PostgreSQL, use RETURNING id
+        database_url = os.environ.get('DATABASE_URL')
+        if database_url:
+            file_id = execute_query(
+                "INSERT INTO files (title, original_filename, stored_filename, file_path, uploaded_by) VALUES (%s,%s,%s,%s,%s) RETURNING id",
+                (title or file.filename, file.filename, stored_filename, file_path, session['user_id'])
+            )
+        else:
+            file_id = execute_query(
+                "INSERT INTO files (title, original_filename, stored_filename, file_path, uploaded_by) VALUES (%s,%s,%s,%s,%s)",
+                (title or file.filename, file.filename, stored_filename, file_path, session['user_id'])
+            )
         
         add_log(session['user_id'], file_id, 'FILE_UPLOAD', f'Uploaded (encrypted): {file.filename}', request.remote_addr)
         flash('File uploaded and encrypted successfully.', 'success')
