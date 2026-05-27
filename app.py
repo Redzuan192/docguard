@@ -1,6 +1,8 @@
 import os
 import uuid
 import mysql.connector
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from datetime import datetime, timedelta
 from collections import defaultdict
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_from_directory, abort, Response
@@ -9,7 +11,7 @@ from cryptography.fernet import Fernet
 from flask_wtf.csrf import CSRFProtect
 
 app = Flask(__name__)
-app.secret_key = 'docguard-super-secret-key-2026'
+app.secret_key = os.environ.get('SECRET_KEY', 'docguard-super-secret-key-2026')
 csrf = CSRFProtect(app)
 
 # =====================
@@ -70,14 +72,6 @@ def reset_login_attempts(ip):
 UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-DB_CONFIG = {
-    'host': '127.0.0.1',
-    'user': 'root',
-    'password': '',
-    'database': 'docguard_db',
-    'port': 3307
-}
-
 ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'png', 'jpg', 'jpeg'}
 MAX_FILE_SIZE = 16 * 1024 * 1024
 
@@ -85,28 +79,45 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # =====================
-# FUNGSI DATABASE
+# DATABASE CONNECTION (Auto-detect Railway PostgreSQL or Local MySQL)
 # =====================
 def get_connection():
-    return mysql.connector.connect(**DB_CONFIG)
+    database_url = os.environ.get('DATABASE_URL')
+    
+    if database_url:
+        # Railway PostgreSQL
+        return psycopg2.connect(database_url, cursor_factory=RealDictCursor)
+    else:
+        # Local MySQL (development)
+        return mysql.connector.connect(
+            host='127.0.0.1',
+            user='root',
+            password='',
+            database='docguard_db',
+            port=3307
+        )
 
 def fetch_one(query, params=None):
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute(query, params or ())
-    row = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    return row
+    cursor = conn.cursor()
+    try:
+        cursor.execute(query, params or ())
+        row = cursor.fetchone()
+        return row
+    finally:
+        cursor.close()
+        conn.close()
 
 def fetch_all(query, params=None):
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute(query, params or ())
-    rows = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    return rows
+    cursor = conn.cursor()
+    try:
+        cursor.execute(query, params or ())
+        rows = cursor.fetchall()
+        return rows
+    finally:
+        cursor.close()
+        conn.close()
 
 def execute_query(query, params=None):
     conn = get_connection()
@@ -114,7 +125,7 @@ def execute_query(query, params=None):
     try:
         cursor.execute(query, params or ())
         conn.commit()
-        return cursor.lastrowid
+        return cursor.lastrowid if hasattr(cursor, 'lastrowid') else None
     finally:
         cursor.close()
         conn.close()
@@ -150,13 +161,27 @@ def add_log(user_id, file_id, action, description, ip_address):
 @app.route('/reset-admin')
 def reset_admin():
     password_hash = generate_password_hash('admin123', method='pbkdf2:sha256:600000')
-    execute_query("""INSERT INTO users (full_name, email, password_hash, role, is_active)
-                     VALUES (%s,%s,%s,%s,%s)
-                     ON DUPLICATE KEY UPDATE 
-                     password_hash=VALUES(password_hash), 
-                     is_active=1, 
-                     role='admin'""",
-                  ('Admin DocGuard', 'admin@docguard.com', password_hash, 'admin', 1))
+    
+    database_url = os.environ.get('DATABASE_URL')
+    if database_url:
+        # PostgreSQL syntax
+        execute_query("""INSERT INTO users (full_name, email, password_hash, role, is_active)
+                         VALUES (%s,%s,%s,%s,%s)
+                         ON CONFLICT (email) DO UPDATE SET 
+                         password_hash=EXCLUDED.password_hash, 
+                         is_active=1, 
+                         role='admin'""",
+                      ('Admin DocGuard', 'admin@docguard.com', password_hash, 'admin', 1))
+    else:
+        # MySQL syntax
+        execute_query("""INSERT INTO users (full_name, email, password_hash, role, is_active)
+                         VALUES (%s,%s,%s,%s,%s)
+                         ON DUPLICATE KEY UPDATE 
+                         password_hash=VALUES(password_hash), 
+                         is_active=1, 
+                         role='admin'""",
+                      ('Admin DocGuard', 'admin@docguard.com', password_hash, 'admin', 1))
+    
     return "✅ Admin reset successful! Login with: admin@docguard.com / admin123"
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -360,7 +385,9 @@ def share_file(file_id):
         
         add_log(session['user_id'], file_id, 'LINK_CREATED', f'Created share link for: {file["original_filename"]}', request.remote_addr)
         
-        link_url = f"http://127.0.0.1:5000/shared/{token}"
+        # Use production domain
+        host = request.host
+        link_url = f"https://{host}/shared/{token}"
         
         if password:
             flash(f'🔗 Share link created (password protected): {link_url}', 'success')
@@ -684,12 +711,5 @@ def admin_reports():
     return render_template('admin_reports.html', top_files=top_files, action_stats=action_stats)
 
 if __name__ == '__main__':
-    print("=" * 50)
-    print("🚀 DocGuard System Starting...")
-    print("=" * 50)
-    print("🔐 Encryption status: ACTIVE (AES-256)")
-    print("🛡️ CSRF Protection: ACTIVE")
-    print("📁 Upload folder:", UPLOAD_FOLDER)
-    print("🔗 Server: http://127.0.0.1:5000")
-    print("=" * 50)
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
