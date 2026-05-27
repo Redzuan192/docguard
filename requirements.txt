@@ -2,3 +2,7 @@ Flask
 mysql-connector-python
 python-dotenv
 cryptography
+werkzeug
+flask-wtf
+gunicorn
+psycopg2-binary
