@@ -14,6 +14,9 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'docguard-super-secret-key-2026')
 csrf = CSRFProtect(app)
 
+# =====================
+# CSRF ERROR HANDLER
+# =====================
 @app.errorhandler(400)
 def csrf_error(e):
     if 'CSRF' in str(e):
@@ -97,13 +100,6 @@ def fetch_one(query, params=None):
     try:
         cursor.execute(query, params or ())
         row = cursor.fetchone()
-        if row is None:
-            return None
-        if hasattr(row, 'keys'):
-            return row
-        if hasattr(cursor, 'description'):
-            columns = [desc[0] for desc in cursor.description]
-            return dict(zip(columns, row))
         return row
     finally:
         cursor.close()
@@ -126,7 +122,6 @@ def execute_query(query, params=None):
     try:
         cursor.execute(query, params or ())
         conn.commit()
-        print(f"Query executed: {query[:60]}...")
         if 'RETURNING' in query.upper():
             try:
                 result = cursor.fetchone()
@@ -344,7 +339,8 @@ def share_file(file_id):
         password = request.form.get('password', '').strip()
         token = generate_token()
         password_hash = generate_password_hash(password, method='pbkdf2:sha256:600000') if password else None
-        execute_query("""INSERT INTO share_links (file_id, token, expiry_date, max_views, used_views, allow_download, password_hash, is_active, created_by) VALUES (%s, %s, %s, %s, 0, %s, %s, 1, %s)""", (file_id, token, expiry_date, max_views, allow_download, password_hash, session['user_id']))
+        link_id = execute_query("""INSERT INTO share_links (file_id, token, expiry_date, max_views, used_views, allow_download, password_hash, is_active, created_by) VALUES (%s, %s, %s, %s, 0, %s, %s, 1, %s) RETURNING id""", (file_id, token, expiry_date, max_views, allow_download, password_hash, session['user_id']))
+        print(f"Created share link with ID: {link_id}")
         add_log(session['user_id'], file_id, 'LINK_CREATED', f'Created share link for: {file["original_filename"]}', request.remote_addr)
         host = request.host
         link_url = f"https://{host}/shared/{token}"
@@ -357,7 +353,32 @@ def share_file(file_id):
 
 @app.route('/shared/<token>', methods=['GET', 'POST'])
 def shared_access(token):
-    link = fetch_one("""SELECT sl.*, f.* FROM share_links sl JOIN files f ON f.id = sl.file_id WHERE sl.token = %s""", (token,))
+    # SELECT with clear column aliases to avoid id conflict
+    link = fetch_one("""
+        SELECT 
+            sl.id as link_id,
+            sl.file_id,
+            sl.token,
+            sl.expiry_date,
+            sl.max_views,
+            sl.used_views,
+            sl.allow_download,
+            sl.password_hash,
+            sl.is_active,
+            sl.created_by,
+            sl.created_at,
+            f.id as file_id_2,
+            f.title,
+            f.original_filename,
+            f.stored_filename,
+            f.file_path,
+            f.uploaded_by,
+            f.created_at as file_created_at
+        FROM share_links sl 
+        JOIN files f ON f.id = sl.file_id 
+        WHERE sl.token = %s
+    """, (token,))
+    
     if not link or int(link.get('is_active', 0)) != 1:
         return render_template('shared_access.html', error='Link Invalid or Expired', link=None)
     if datetime.now() > link['expiry_date']:
@@ -371,26 +392,14 @@ def shared_access(token):
             if not check_password_hash(password_hash, request.form.get('link_password', '')):
                 flash('Incorrect password.', 'danger')
                 return render_template('shared_access.html', link=link, error=None, require_password=True)
-            # UPDATE VIEW COUNT
+            # UPDATE VIEW COUNT using link_id
             current_views = int(link['used_views']) if link['used_views'] is not None else 0
             new_views = current_views + 1
-            execute_query("UPDATE share_links SET used_views = %s WHERE id = %s", (new_views, link['id']))
-            print(f"View count updated: {current_views} -> {new_views} for link {link['id']}")
-            # VERIFY with direct connection
-            try:
-                conn = get_connection()
-                cursor = conn.cursor()
-                cursor.execute("SELECT used_views FROM share_links WHERE id = %s", (link['id'],))
-                result = cursor.fetchone()
-                if result:
-                    used_val = result[0] if not isinstance(result, dict) else result.get('used_views')
-                    print(f"VERIFICATION DIRECT: used_views = {used_val}")
-                cursor.close()
-                conn.close()
-            except Exception as ve:
-                print(f"Verify error: {ve}")
+            execute_query("UPDATE share_links SET used_views = %s WHERE id = %s", (new_views, link['link_id']))
+            print(f"View count updated: {current_views} -> {new_views} for link {link['link_id']}")
             add_log(None, link['file_id'], 'FILE_VIEW', f'Viewed: {link["original_filename"]}', request.remote_addr)
-            link = fetch_one("""SELECT sl.*, f.* FROM share_links sl JOIN files f ON f.id = sl.file_id WHERE sl.token = %s""", (token,))
+            # Refresh link data
+            link['used_views'] = new_views
             return render_template('shared_access.html', link=link, error=None, require_password=False)
         else:
             return render_template('shared_access.html', link=link, error=None, require_password=True)
@@ -398,30 +407,36 @@ def shared_access(token):
     # NO PASSWORD - UPDATE VIEW COUNT
     current_views = int(link['used_views']) if link['used_views'] is not None else 0
     new_views = current_views + 1
-    execute_query("UPDATE share_links SET used_views = %s WHERE id = %s", (new_views, link['id']))
-    print(f"View count updated: {current_views} -> {new_views} for link {link['id']}")
-    # VERIFY with direct connection
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT used_views FROM share_links WHERE id = %s", (link['id'],))
-        result = cursor.fetchone()
-        if result:
-            used_val = result[0] if not isinstance(result, dict) else result.get('used_views')
-            print(f"VERIFICATION DIRECT: used_views = {used_val}")
-        cursor.close()
-        conn.close()
-    except Exception as ve:
-        print(f"Verify error: {ve}")
+    execute_query("UPDATE share_links SET used_views = %s WHERE id = %s", (new_views, link['link_id']))
+    print(f"View count updated: {current_views} -> {new_views} for link {link['link_id']}")
     add_log(None, link['file_id'], 'FILE_VIEW', f'Viewed: {link["original_filename"]}', request.remote_addr)
-    link = fetch_one("""SELECT sl.*, f.* FROM share_links sl JOIN files f ON f.id = sl.file_id WHERE sl.token = %s""", (token,))
+    link['used_views'] = new_views
     return render_template('shared_access.html', link=link, error=None, require_password=False)
 
 @app.route('/download/<token>')
 def download_shared_file(token):
-    link = fetch_one("""SELECT sl.*, f.* FROM share_links sl JOIN files f ON f.id = sl.file_id WHERE sl.token = %s""", (token,))
+    link = fetch_one("""
+        SELECT 
+            sl.id as link_id,
+            sl.file_id,
+            sl.token,
+            sl.expiry_date,
+            sl.max_views,
+            sl.used_views,
+            sl.allow_download,
+            sl.password_hash,
+            sl.is_active,
+            f.stored_filename,
+            f.original_filename,
+            f.file_path
+        FROM share_links sl 
+        JOIN files f ON f.id = sl.file_id 
+        WHERE sl.token = %s
+    """, (token,))
+    
     if not link or not link.get('allow_download'):
         abort(403)
+    
     with open(link['file_path'], 'rb') as f:
         encrypted_data = f.read()
     decrypted_data = decrypt_file(encrypted_data)
