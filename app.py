@@ -14,9 +14,6 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'docguard-super-secret-key-2026')
 csrf = CSRFProtect(app)
 
-# =====================
-# CSRF ERROR HANDLER
-# =====================
 @app.errorhandler(400)
 def csrf_error(e):
     if 'CSRF' in str(e):
@@ -25,7 +22,7 @@ def csrf_error(e):
     return e
 
 # =====================
-# AES-256 ENCRYPTION SETUP
+# AES-256 ENCRYPTION
 # =====================
 KEY_FILE = 'encryption_key.key'
 
@@ -100,6 +97,13 @@ def fetch_one(query, params=None):
     try:
         cursor.execute(query, params or ())
         row = cursor.fetchone()
+        if row is None:
+            return None
+        if hasattr(row, 'keys'):
+            return row
+        if hasattr(cursor, 'description'):
+            columns = [desc[0] for desc in cursor.description]
+            return dict(zip(columns, row))
         return row
     finally:
         cursor.close()
@@ -122,8 +126,7 @@ def execute_query(query, params=None):
     try:
         cursor.execute(query, params or ())
         conn.commit()
-        print(f"Query executed: {query[:80]}...")
-        
+        print(f"Query executed: {query[:60]}...")
         if 'RETURNING' in query.upper():
             try:
                 result = cursor.fetchone()
@@ -131,7 +134,6 @@ def execute_query(query, params=None):
                     return result[0] if isinstance(result, tuple) else result.get('id')
             except:
                 pass
-        
         if hasattr(cursor, 'lastrowid'):
             return cursor.lastrowid
         return None
@@ -199,12 +201,10 @@ def register():
         full_name = request.form['full_name'].strip()
         email = request.form['email'].strip().lower()
         password = request.form['password']
-        
         existing = fetch_one("SELECT id FROM users WHERE email = %s", (email,))
         if existing:
             flash('Email already registered.', 'danger')
             return redirect(url_for('register'))
-        
         password_hash = generate_password_hash(password, method='pbkdf2:sha256:600000')
         execute_query(
             "INSERT INTO users (full_name, email, password_hash, role, is_active) VALUES (%s, %s, %s, 'user', 1)",
@@ -228,17 +228,14 @@ def login():
         email = request.form['email'].strip().lower()
         password = request.form['password']
         ip = request.remote_addr
-
         if is_rate_limited(ip):
             flash('Too many failed attempts. Try again after 5 minutes.', 'danger')
             return redirect(url_for('login'))
-
         user = fetch_one("SELECT * FROM users WHERE email=%s", (email,))
         if not user or int(user.get('is_active', 0)) != 1:
             record_failed_attempt(ip)
             flash('Invalid email or password.', 'danger')
             return redirect(url_for('login'))
-
         if check_password_hash(user['password_hash'], password):
             reset_login_attempts(ip)
             session['user_id'] = user['id']
@@ -249,7 +246,6 @@ def login():
                 return redirect(url_for('admin_dashboard'))
             else:
                 return redirect(url_for('dashboard'))
-
         record_failed_attempt(ip)
         flash('Invalid email or password.', 'danger')
     return render_template('login.html')
@@ -276,14 +272,7 @@ def dashboard():
         'my_views': fetch_one("SELECT COALESCE(SUM(used_views), 0) AS total FROM share_links WHERE created_by = %s", (session['user_id'],))
     }
     recent_files = fetch_all("SELECT * FROM files WHERE uploaded_by = %s ORDER BY created_at DESC LIMIT 5", (session['user_id'],))
-    recent_links = fetch_all("""
-        SELECT sl.*, f.original_filename 
-        FROM share_links sl 
-        JOIN files f ON f.id = sl.file_id 
-        WHERE sl.created_by = %s 
-        ORDER BY sl.created_at DESC 
-        LIMIT 5
-    """, (session['user_id'],))
+    recent_links = fetch_all("""SELECT sl.*, f.original_filename FROM share_links sl JOIN files f ON f.id = sl.file_id WHERE sl.created_by = %s ORDER BY sl.created_at DESC LIMIT 5""", (session['user_id'],))
     return render_template('dashboard.html', stats=stats, recent_files=recent_files, recent_links=recent_links)
 
 @app.route('/upload', methods=['GET', 'POST'])
@@ -307,15 +296,9 @@ def upload_file():
             f.write(encrypted_data)
         database_url = os.environ.get('DATABASE_URL')
         if database_url:
-            file_id = execute_query(
-                "INSERT INTO files (title, original_filename, stored_filename, file_path, uploaded_by) VALUES (%s,%s,%s,%s,%s) RETURNING id",
-                (title or file.filename, file.filename, stored_filename, file_path, session['user_id'])
-            )
+            file_id = execute_query("INSERT INTO files (title, original_filename, stored_filename, file_path, uploaded_by) VALUES (%s,%s,%s,%s,%s) RETURNING id", (title or file.filename, file.filename, stored_filename, file_path, session['user_id']))
         else:
-            file_id = execute_query(
-                "INSERT INTO files (title, original_filename, stored_filename, file_path, uploaded_by) VALUES (%s,%s,%s,%s,%s)",
-                (title or file.filename, file.filename, stored_filename, file_path, session['user_id'])
-            )
+            file_id = execute_query("INSERT INTO files (title, original_filename, stored_filename, file_path, uploaded_by) VALUES (%s,%s,%s,%s,%s)", (title or file.filename, file.filename, stored_filename, file_path, session['user_id']))
         add_log(session['user_id'], file_id, 'FILE_UPLOAD', f'Uploaded (encrypted): {file.filename}', request.remote_addr)
         flash('File uploaded and encrypted successfully.', 'success')
         return redirect(url_for('my_files'))
@@ -361,10 +344,7 @@ def share_file(file_id):
         password = request.form.get('password', '').strip()
         token = generate_token()
         password_hash = generate_password_hash(password, method='pbkdf2:sha256:600000') if password else None
-        execute_query("""INSERT INTO share_links 
-            (file_id, token, expiry_date, max_views, used_views, allow_download, password_hash, is_active, created_by)
-            VALUES (%s, %s, %s, %s, 0, %s, %s, 1, %s)""",
-            (file_id, token, expiry_date, max_views, allow_download, password_hash, session['user_id']))
+        execute_query("""INSERT INTO share_links (file_id, token, expiry_date, max_views, used_views, allow_download, password_hash, is_active, created_by) VALUES (%s, %s, %s, %s, 0, %s, %s, 1, %s)""", (file_id, token, expiry_date, max_views, allow_download, password_hash, session['user_id']))
         add_log(session['user_id'], file_id, 'LINK_CREATED', f'Created share link for: {file["original_filename"]}', request.remote_addr)
         host = request.host
         link_url = f"https://{host}/shared/{token}"
@@ -392,20 +372,23 @@ def shared_access(token):
                 flash('Incorrect password.', 'danger')
                 return render_template('shared_access.html', link=link, error=None, require_password=True)
             # UPDATE VIEW COUNT
+            current_views = int(link['used_views']) if link['used_views'] is not None else 0
+            new_views = current_views + 1
+            execute_query("UPDATE share_links SET used_views = %s WHERE id = %s", (new_views, link['id']))
+            print(f"View count updated: {current_views} -> {new_views} for link {link['id']}")
+            # VERIFY with direct connection
             try:
-                current_views = int(link['used_views']) if link['used_views'] is not None else 0
-                new_views = current_views + 1
-                execute_query("UPDATE share_links SET used_views = %s WHERE id = %s", (new_views, link['id']))
-                print(f"View count updated: {current_views} -> {new_views} for link {link['id']}")
-                # VERIFY
-                verify = fetch_one("SELECT used_views FROM share_links WHERE id = %s", (link['id'],))
-                if verify:
-                    used_val = verify['used_views'] if isinstance(verify, dict) else verify[0]
-                    print(f"Verification: used_views = {used_val}")
-                else:
-                    print(f"Verification: No record found for id {link['id']}")
-            except Exception as e:
-                print(f"Error updating view count: {e}")
+                conn = get_connection()
+                cursor = conn.cursor()
+                cursor.execute("SELECT used_views FROM share_links WHERE id = %s", (link['id'],))
+                result = cursor.fetchone()
+                if result:
+                    used_val = result[0] if not isinstance(result, dict) else result.get('used_views')
+                    print(f"VERIFICATION DIRECT: used_views = {used_val}")
+                cursor.close()
+                conn.close()
+            except Exception as ve:
+                print(f"Verify error: {ve}")
             add_log(None, link['file_id'], 'FILE_VIEW', f'Viewed: {link["original_filename"]}', request.remote_addr)
             link = fetch_one("""SELECT sl.*, f.* FROM share_links sl JOIN files f ON f.id = sl.file_id WHERE sl.token = %s""", (token,))
             return render_template('shared_access.html', link=link, error=None, require_password=False)
@@ -413,21 +396,23 @@ def shared_access(token):
             return render_template('shared_access.html', link=link, error=None, require_password=True)
     
     # NO PASSWORD - UPDATE VIEW COUNT
+    current_views = int(link['used_views']) if link['used_views'] is not None else 0
+    new_views = current_views + 1
+    execute_query("UPDATE share_links SET used_views = %s WHERE id = %s", (new_views, link['id']))
+    print(f"View count updated: {current_views} -> {new_views} for link {link['id']}")
+    # VERIFY with direct connection
     try:
-        current_views = int(link['used_views']) if link['used_views'] is not None else 0
-        new_views = current_views + 1
-        execute_query("UPDATE share_links SET used_views = %s WHERE id = %s", (new_views, link['id']))
-        print(f"View count updated: {current_views} -> {new_views} for link {link['id']}")
-        # VERIFY
-        verify = fetch_one("SELECT used_views FROM share_links WHERE id = %s", (link['id'],))
-        if verify:
-            used_val = verify['used_views'] if isinstance(verify, dict) else verify[0]
-            print(f"Verification: used_views = {used_val}")
-        else:
-            print(f"Verification: No record found for id {link['id']}")
-    except Exception as e:
-        print(f"Error updating view count: {e}")
-    
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT used_views FROM share_links WHERE id = %s", (link['id'],))
+        result = cursor.fetchone()
+        if result:
+            used_val = result[0] if not isinstance(result, dict) else result.get('used_views')
+            print(f"VERIFICATION DIRECT: used_views = {used_val}")
+        cursor.close()
+        conn.close()
+    except Exception as ve:
+        print(f"Verify error: {ve}")
     add_log(None, link['file_id'], 'FILE_VIEW', f'Viewed: {link["original_filename"]}', request.remote_addr)
     link = fetch_one("""SELECT sl.*, f.* FROM share_links sl JOIN files f ON f.id = sl.file_id WHERE sl.token = %s""", (token,))
     return render_template('shared_access.html', link=link, error=None, require_password=False)
@@ -444,8 +429,7 @@ def download_shared_file(token):
     with open(temp_path, 'wb') as f:
         f.write(decrypted_data)
     add_log(None, link['file_id'], 'FILE_DOWNLOAD', f'Downloaded: {link["original_filename"]}', request.remote_addr)
-    response = send_from_directory(UPLOAD_FOLDER, "temp_download_" + link['stored_filename'], 
-                                 as_attachment=True, download_name=link['original_filename'])
+    response = send_from_directory(UPLOAD_FOLDER, "temp_download_" + link['stored_filename'], as_attachment=True, download_name=link['original_filename'])
     @response.call_on_close
     def cleanup():
         try:
@@ -461,25 +445,14 @@ def download_shared_file(token):
 def my_links():
     if not is_logged_in():
         return redirect(url_for('login'))
-    links = fetch_all("""
-        SELECT sl.*, f.original_filename, f.id as file_id
-        FROM share_links sl
-        JOIN files f ON f.id = sl.file_id
-        WHERE sl.created_by = %s
-        ORDER BY sl.created_at DESC
-    """, (session['user_id'],))
+    links = fetch_all("""SELECT sl.*, f.original_filename, f.id as file_id FROM share_links sl JOIN files f ON f.id = sl.file_id WHERE sl.created_by = %s ORDER BY sl.created_at DESC""", (session['user_id'],))
     return render_template('my_links.html', links=links)
 
 @app.route('/edit-link/<int:link_id>', methods=['GET', 'POST'])
 def edit_link(link_id):
     if not is_logged_in():
         return redirect(url_for('login'))
-    link = fetch_one("""
-        SELECT sl.*, f.original_filename 
-        FROM share_links sl
-        JOIN files f ON f.id = sl.file_id
-        WHERE sl.id = %s AND sl.created_by = %s
-    """, (link_id, session['user_id']))
+    link = fetch_one("""SELECT sl.*, f.original_filename FROM share_links sl JOIN files f ON f.id = sl.file_id WHERE sl.id = %s AND sl.created_by = %s""", (link_id, session['user_id']))
     if not link:
         flash('Link not found.', 'danger')
         return redirect(url_for('my_links'))
@@ -488,13 +461,8 @@ def edit_link(link_id):
         max_views = int(request.form.get('max_views', 5))
         allow_download = 1 if request.form.get('allow_download') else 0
         is_active = 1 if request.form.get('is_active') else 0
-        execute_query("""
-            UPDATE share_links 
-            SET expiry_date = %s, max_views = %s, allow_download = %s, is_active = %s
-            WHERE id = %s
-        """, (expiry_date, max_views, allow_download, is_active, link_id))
-        add_log(session['user_id'], link['file_id'], 'LINK_EDITED', 
-                f'Edited share link for: {link["original_filename"]}', request.remote_addr)
+        execute_query("""UPDATE share_links SET expiry_date = %s, max_views = %s, allow_download = %s, is_active = %s WHERE id = %s""", (expiry_date, max_views, allow_download, is_active, link_id))
+        add_log(session['user_id'], link['file_id'], 'LINK_EDITED', f'Edited share link for: {link["original_filename"]}', request.remote_addr)
         flash('Share link updated successfully.', 'success')
         return redirect(url_for('my_links'))
     return render_template('edit_link.html', link=link)
@@ -503,18 +471,12 @@ def edit_link(link_id):
 def cancel_link(link_id):
     if not is_logged_in():
         return redirect(url_for('login'))
-    link = fetch_one("""
-        SELECT sl.*, f.original_filename 
-        FROM share_links sl
-        JOIN files f ON f.id = sl.file_id
-        WHERE sl.id = %s AND sl.created_by = %s
-    """, (link_id, session['user_id']))
+    link = fetch_one("""SELECT sl.*, f.original_filename FROM share_links sl JOIN files f ON f.id = sl.file_id WHERE sl.id = %s AND sl.created_by = %s""", (link_id, session['user_id']))
     if not link:
         flash('Link not found.', 'danger')
         return redirect(url_for('my_links'))
     execute_query("UPDATE share_links SET is_active = 0 WHERE id = %s", (link_id,))
-    add_log(session['user_id'], link['file_id'], 'LINK_CANCELLED', 
-            f'Cancelled share link for: {link["original_filename"]}', request.remote_addr)
+    add_log(session['user_id'], link['file_id'], 'LINK_CANCELLED', f'Cancelled share link for: {link["original_filename"]}', request.remote_addr)
     flash('Share link has been revoked/cancelled.', 'success')
     return redirect(url_for('my_links'))
 
@@ -529,13 +491,7 @@ def export_logs():
     from io import StringIO
     keyword = request.args.get('keyword', '')
     action_filter = request.args.get('action', '')
-    query = """
-        SELECT al.created_at, u.full_name, f.original_filename, al.action, al.description, al.ip_address
-        FROM audit_logs al
-        LEFT JOIN users u ON u.id = al.user_id
-        LEFT JOIN files f ON f.id = al.file_id
-        WHERE 1=1
-    """
+    query = """SELECT al.created_at, u.full_name, f.original_filename, al.action, al.description, al.ip_address FROM audit_logs al LEFT JOIN users u ON u.id = al.user_id LEFT JOIN files f ON f.id = al.file_id WHERE 1=1"""
     params = []
     if keyword:
         query += " AND (al.description LIKE %s OR u.full_name LIKE %s OR f.original_filename LIKE %s)"
@@ -549,14 +505,7 @@ def export_logs():
     writer = csv.writer(si)
     writer.writerow(['Date & Time', 'User', 'File', 'Action', 'Description', 'IP Address'])
     for log in logs:
-        writer.writerow([
-            log['created_at'],
-            log['full_name'] or 'Public/Unknown',
-            log['original_filename'] or '-',
-            log['action'],
-            log['description'],
-            log['ip_address'] or '-'
-        ])
+        writer.writerow([log['created_at'], log['full_name'] or 'Public/Unknown', log['original_filename'] or '-', log['action'], log['description'], log['ip_address'] or '-'])
     output = si.getvalue()
     response = Response(output, mimetype='text/csv')
     filename = f"audit_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
@@ -575,14 +524,7 @@ def admin_dashboard():
     total_files = fetch_one("SELECT COUNT(*) AS total FROM files")
     total_links = fetch_one("SELECT COUNT(*) AS total FROM share_links")
     total_logs = fetch_one("SELECT COUNT(*) AS total FROM audit_logs")
-    recent_logs = fetch_all("""
-        SELECT al.*, u.full_name, f.original_filename
-        FROM audit_logs al
-        LEFT JOIN users u ON u.id = al.user_id
-        LEFT JOIN files f ON f.id = al.file_id
-        ORDER BY al.created_at DESC
-        LIMIT 10
-    """)
+    recent_logs = fetch_all("""SELECT al.*, u.full_name, f.original_filename FROM audit_logs al LEFT JOIN users u ON u.id = al.user_id LEFT JOIN files f ON f.id = al.file_id ORDER BY al.created_at DESC LIMIT 10""")
     return render_template('admin_dashboard.html', total_users=total_users, total_files=total_files, total_links=total_links, total_logs=total_logs, recent_logs=recent_logs)
 
 @app.route('/admin/users')
@@ -603,8 +545,7 @@ def toggle_user(user_id):
     if user:
         new_status = 0 if user['is_active'] else 1
         execute_query("UPDATE users SET is_active = %s WHERE id = %s", (new_status, user_id))
-        add_log(session['user_id'], None, 'USER_STATUS_CHANGE', 
-                f'Toggled user {user_id} to {"active" if new_status else "inactive"}', request.remote_addr)
+        add_log(session['user_id'], None, 'USER_STATUS_CHANGE', f'Toggled user {user_id} to {"active" if new_status else "inactive"}', request.remote_addr)
         flash('User status updated.', 'success')
     return redirect(url_for('admin_users'))
 
@@ -614,13 +555,7 @@ def admin_logs():
         return redirect(url_for('home'))
     keyword = request.args.get('keyword', '')
     action_filter = request.args.get('action', '')
-    query = """
-        SELECT al.*, u.full_name, f.original_filename
-        FROM audit_logs al
-        LEFT JOIN users u ON u.id = al.user_id
-        LEFT JOIN files f ON f.id = al.file_id
-        WHERE 1=1
-    """
+    query = """SELECT al.*, u.full_name, f.original_filename FROM audit_logs al LEFT JOIN users u ON u.id = al.user_id LEFT JOIN files f ON f.id = al.file_id WHERE 1=1"""
     params = []
     if keyword:
         query += " AND (al.description LIKE %s OR u.full_name LIKE %s OR f.original_filename LIKE %s)"
@@ -636,19 +571,8 @@ def admin_logs():
 def admin_reports():
     if not is_logged_in() or not is_admin():
         return redirect(url_for('home'))
-    top_files = fetch_all("""
-        SELECT f.original_filename, sl.used_views AS total_views
-        FROM files f
-        JOIN share_links sl ON sl.file_id = f.id
-        ORDER BY total_views DESC
-        LIMIT 10
-    """)
-    action_stats = fetch_all("""
-        SELECT action, COUNT(*) AS total
-        FROM audit_logs
-        GROUP BY action
-        ORDER BY total DESC
-    """)
+    top_files = fetch_all("""SELECT f.original_filename, sl.used_views AS total_views FROM files f JOIN share_links sl ON sl.file_id = f.id ORDER BY total_views DESC LIMIT 10""")
+    action_stats = fetch_all("""SELECT action, COUNT(*) AS total FROM audit_logs GROUP BY action ORDER BY total DESC""")
     return render_template('admin_reports.html', top_files=top_files, action_stats=action_stats)
 
 if __name__ == '__main__':
