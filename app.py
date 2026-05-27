@@ -79,16 +79,14 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # =====================
-# DATABASE CONNECTION (Auto-detect Railway PostgreSQL or Local MySQL)
+# DATABASE CONNECTION
 # =====================
 def get_connection():
     database_url = os.environ.get('DATABASE_URL')
     
     if database_url:
-        # Railway PostgreSQL
         return psycopg2.connect(database_url, cursor_factory=RealDictCursor)
     else:
-        # Local MySQL (development)
         return mysql.connector.connect(
             host='127.0.0.1',
             user='root',
@@ -126,7 +124,6 @@ def execute_query(query, params=None):
         cursor.execute(query, params or ())
         conn.commit()
         
-        # Try to get last inserted id for PostgreSQL with RETURNING
         if 'RETURNING' in query.upper():
             try:
                 result = cursor.fetchone()
@@ -135,7 +132,6 @@ def execute_query(query, params=None):
             except:
                 pass
         
-        # For MySQL
         if hasattr(cursor, 'lastrowid'):
             return cursor.lastrowid
         return None
@@ -163,17 +159,10 @@ def is_admin():
     return session.get('role') == 'admin'
 
 def add_log(user_id, file_id, action, description, ip_address):
-    # Handle None values
-    if file_id is None:
-        execute_query(
-            "INSERT INTO audit_logs (user_id, file_id, action, description, ip_address) VALUES (%s, %s, %s, %s, %s)",
-            (user_id, None, action, description, ip_address)
-        )
-    else:
-        execute_query(
-            "INSERT INTO audit_logs (user_id, file_id, action, description, ip_address) VALUES (%s, %s, %s, %s, %s)",
-            (user_id, file_id, action, description, ip_address)
-        )
+    execute_query(
+        "INSERT INTO audit_logs (user_id, file_id, action, description, ip_address) VALUES (%s, %s, %s, %s, %s)",
+        (user_id, file_id, action, description, ip_address)
+    )
 
 # =====================
 # ROUTES - AUTHENTICATION
@@ -184,7 +173,6 @@ def reset_admin():
     
     database_url = os.environ.get('DATABASE_URL')
     if database_url:
-        # PostgreSQL syntax
         execute_query("""INSERT INTO users (full_name, email, password_hash, role, is_active)
                          VALUES (%s,%s,%s,%s,%s)
                          ON CONFLICT (email) DO UPDATE SET 
@@ -193,7 +181,6 @@ def reset_admin():
                          role='admin'""",
                       ('Admin DocGuard', 'admin@docguard.com', password_hash, 'admin', 1))
     else:
-        # MySQL syntax
         execute_query("""INSERT INTO users (full_name, email, password_hash, role, is_active)
                          VALUES (%s,%s,%s,%s,%s)
                          ON DUPLICATE KEY UPDATE 
@@ -339,7 +326,6 @@ def upload_file():
         with open(file_path, 'wb') as f:
             f.write(encrypted_data)
 
-        # For PostgreSQL, use RETURNING id
         database_url = os.environ.get('DATABASE_URL')
         if database_url:
             file_id = execute_query(
@@ -413,7 +399,6 @@ def share_file(file_id):
         
         add_log(session['user_id'], file_id, 'LINK_CREATED', f'Created share link for: {file["original_filename"]}', request.remote_addr)
         
-        # Use production domain
         host = request.host
         link_url = f"https://{host}/shared/{token}"
         
@@ -446,7 +431,8 @@ def shared_access(token):
                 flash('Incorrect password.', 'danger')
                 return render_template('shared_access.html', link=link, error=None, require_password=True)
             
-            new_views = link['used_views'] + 1
+            # UPDATE VIEW COUNT
+            new_views = int(link['used_views']) + 1
             execute_query("UPDATE share_links SET used_views = %s WHERE id = %s", (new_views, link['id']))
             add_log(None, link['file_id'], 'FILE_VIEW', f'Viewed: {link["original_filename"]}', request.remote_addr)
             
@@ -455,7 +441,8 @@ def shared_access(token):
         else:
             return render_template('shared_access.html', link=link, error=None, require_password=True)
     
-    new_views = link['used_views'] + 1
+    # NO PASSWORD - UPDATE VIEW COUNT
+    new_views = int(link['used_views']) + 1
     execute_query("UPDATE share_links SET used_views = %s WHERE id = %s", (new_views, link['id']))
     add_log(None, link['file_id'], 'FILE_VIEW', f'Viewed: {link["original_filename"]}', request.remote_addr)
     
