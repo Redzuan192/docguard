@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div class="page-header mb-0">
@@ -28,11 +29,11 @@
                 </thead>
                 <tbody>
                     {% for link in links %}
-                    <tr>
+                    <tr id="link-{{ link.id }}">
                         <td><strong>{{ link.original_filename }}</strong></td>
                         <td><code style="font-size: 0.7rem;">{{ link.token[:20] }}...</code></td>
                         <td>{{ link.expiry_date.strftime('%d %b %Y, %H:%M') if link.expiry_date else 'N/A' }}</td>
-                        <td>
+                        <td class="views-count" id="views-{{ link.id }}">
                             {% if link.max_views == 999999 %}
                                 {{ link.used_views }} / ∞
                             {% else %}
@@ -70,6 +71,9 @@
 </div>
 
 <script>
-    setTimeout(function() { location.reload(); }, 10000);
+    // Aggressive auto refresh every 3 seconds
+    setInterval(function() {
+        location.reload();
+    }, 3000);
 </script>
 {% endblock %}

@@ -123,6 +123,7 @@ def execute_query(query, params=None):
     try:
         cursor.execute(query, params or ())
         conn.commit()
+        print(f"✅ Query executed: {query[:100]}...")
         
         if 'RETURNING' in query.upper():
             try:
@@ -135,6 +136,10 @@ def execute_query(query, params=None):
         if hasattr(cursor, 'lastrowid'):
             return cursor.lastrowid
         return None
+    except Exception as e:
+        conn.rollback()
+        print(f"❌ Query failed: {e}")
+        raise
     finally:
         cursor.close()
         conn.close()
@@ -431,15 +436,18 @@ def shared_access(token):
                 flash('Incorrect password.', 'danger')
                 return render_template('shared_access.html', link=link, error=None, require_password=True)
             
-            # ========== AUTO VIEW COUNT (FIXED) ==========
+            # UPDATE VIEW COUNT
             try:
                 current_views = int(link['used_views']) if link['used_views'] is not None else 0
                 new_views = current_views + 1
                 execute_query("UPDATE share_links SET used_views = %s WHERE id = %s", (new_views, link['id']))
                 print(f"✅ View count updated: {current_views} -> {new_views} for link {link['id']}")
+                
+                # VERIFY
+                verify = fetch_one("SELECT used_views FROM share_links WHERE id = %s", (link['id'],))
+                print(f"🔍 Verification: used_views = {verify['used_views'] if verify else 'NULL'}")
             except Exception as e:
                 print(f"❌ Error updating view count: {e}")
-            # ============================================
             
             add_log(None, link['file_id'], 'FILE_VIEW', f'Viewed: {link["original_filename"]}', request.remote_addr)
             
@@ -448,15 +456,18 @@ def shared_access(token):
         else:
             return render_template('shared_access.html', link=link, error=None, require_password=True)
     
-    # ========== AUTO VIEW COUNT (FIXED) ==========
+    # NO PASSWORD - UPDATE VIEW COUNT
     try:
         current_views = int(link['used_views']) if link['used_views'] is not None else 0
         new_views = current_views + 1
         execute_query("UPDATE share_links SET used_views = %s WHERE id = %s", (new_views, link['id']))
         print(f"✅ View count updated: {current_views} -> {new_views} for link {link['id']}")
+        
+        # VERIFY
+        verify = fetch_one("SELECT used_views FROM share_links WHERE id = %s", (link['id'],))
+        print(f"🔍 Verification: used_views = {verify['used_views'] if verify else 'NULL'}")
     except Exception as e:
         print(f"❌ Error updating view count: {e}")
-    # ============================================
     
     add_log(None, link['file_id'], 'FILE_VIEW', f'Viewed: {link["original_filename"]}', request.remote_addr)
     
