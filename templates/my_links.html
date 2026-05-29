@@ -6,9 +6,14 @@
         <h1>My Share Links</h1>
         <p>Manage your shared document links</p>
     </div>
-    <a href="{{ url_for('my_files') }}" class="btn btn-outline-custom">
-        <i class="bi bi-folder"></i> Back to Files
-    </a>
+    <div>
+        <button onclick="location.reload()" class="btn btn-outline-custom me-2">
+            <i class="bi bi-arrow-repeat"></i> Refresh
+        </button>
+        <a href="{{ url_for('my_files') }}" class="btn btn-outline-custom">
+            <i class="bi bi-folder"></i> Back to Files
+        </a>
+    </div>
 </div>
 
 <div class="card-modern">
@@ -55,7 +60,7 @@
                                 <button type="submit" class="btn btn-danger-custom btn-sm" onclick="return confirm('Revoke this link permanently?')">Revoke</button>
                             </form>
                         </td>
-                    </tr>
+                    <tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -70,10 +75,5 @@
     </div>
 </div>
 
-<script>
-    // Aggressive auto refresh every 3 seconds
-    setInterval(function() {
-        location.reload();
-    }, 3000);
-</script>
+<!-- No auto refresh - manual refresh only -->
 {% endblock %}
