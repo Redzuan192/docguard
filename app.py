@@ -294,8 +294,8 @@ def upload_file():
             file_id = execute_query("INSERT INTO files (title, original_filename, stored_filename, file_path, uploaded_by) VALUES (%s,%s,%s,%s,%s) RETURNING id", (title or file.filename, file.filename, stored_filename, file_path, session['user_id']))
         else:
             file_id = execute_query("INSERT INTO files (title, original_filename, stored_filename, file_path, uploaded_by) VALUES (%s,%s,%s,%s,%s)", (title or file.filename, file.filename, stored_filename, file_path, session['user_id']))
-        add_log(session['user_id'], file_id, 'FILE_UPLOAD', f'Uploaded (encrypted): {file.filename}', request.remote_addr)
-        flash('File uploaded and encrypted successfully.', 'success')
+        add_log(session['user_id'], file_id, 'FILE_UPLOAD', f'Uploaded: {file.filename}', request.remote_addr)
+        flash('File uploaded successfully.', 'success')
         return redirect(url_for('my_files'))
     return render_template('upload.html')
 
@@ -553,14 +553,17 @@ def admin_users():
 def toggle_user(user_id):
     if not is_logged_in() or not is_admin():
         return redirect(url_for('home'))
+    
     if user_id == session['user_id']:
         flash('You cannot deactivate your own account.', 'danger')
         return redirect(url_for('admin_users'))
+    
     user = fetch_one("SELECT is_active FROM users WHERE id = %s", (user_id,))
     if user:
         new_status = 0 if user['is_active'] else 1
         execute_query("UPDATE users SET is_active = %s WHERE id = %s", (new_status, user_id))
-        add_log(session['user_id'], None, 'USER_STATUS_CHANGE', f'Toggled user {user_id} to {"active" if new_status else "inactive"}', request.remote_addr)
+        add_log(session['user_id'], None, 'USER_STATUS_CHANGE', 
+                f'Toggled user {user_id} to {"active" if new_status else "inactive"}', request.remote_addr)
         flash('User status updated.', 'success')
     return redirect(url_for('admin_users'))
 
