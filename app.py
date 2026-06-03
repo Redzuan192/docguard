@@ -50,21 +50,31 @@ def decrypt_file(data):
     return cipher.decrypt(data)
 
 # =====================
-# RATE LIMITING (FIXED)
+# RATE LIMITING (DATABASE-BASED)
 # =====================
-login_attempts = defaultdict(list)
 
-def is_rate_limited(ip):
-    now = datetime.now()
-    login_attempts[ip] = [t for t in login_attempts[ip] if now - t < timedelta(minutes=5)]
-    return len(login_attempts[ip]) >= 5
+def is_rate_limited_db(ip):
+    """Check if IP has more than 5 failed attempts in last 5 minutes"""
+    five_min_ago = datetime.now() - timedelta(minutes=5)
+    result = fetch_one(
+        "SELECT COUNT(*) as total FROM login_attempts WHERE ip_address = %s AND attempted_at > %s",
+        (ip, five_min_ago)
+    )
+    return result['total'] >= 5 if result else False
 
-def record_failed_attempt(ip):
-    login_attempts[ip].append(datetime.now())
+def record_failed_attempt_db(ip):
+    """Record failed login attempt in database"""
+    execute_query(
+        "INSERT INTO login_attempts (ip_address) VALUES (%s)",
+        (ip,)
+    )
 
-def reset_login_attempts(ip):
-    if ip in login_attempts:
-        del login_attempts[ip]
+def reset_login_attempts_db(ip):
+    """Clear all failed attempts for an IP (on successful login)"""
+    execute_query(
+        "DELETE FROM login_attempts WHERE ip_address = %s",
+        (ip,)
+    )
 
 # =====================
 # KONFIGURASI
@@ -226,19 +236,19 @@ def login():
         password = request.form['password']
         ip = request.remote_addr
 
-        # CHECK RATE LIMITING FIRST
-        if is_rate_limited(ip):
+        # CHECK RATE LIMITING (Database-based)
+        if is_rate_limited_db(ip):
             flash('Too many failed attempts. Please try again after 5 minutes.', 'danger')
             return redirect(url_for('login'))
 
         user = fetch_one("SELECT * FROM users WHERE email=%s", (email,))
         if not user or int(user.get('is_active', 0)) != 1:
-            record_failed_attempt(ip)
+            record_failed_attempt_db(ip)
             flash('Invalid email or password.', 'danger')
             return redirect(url_for('login'))
 
         if check_password_hash(user['password_hash'], password):
-            reset_login_attempts(ip)
+            reset_login_attempts_db(ip)
             session['user_id'] = user['id']
             session['full_name'] = user['full_name']
             session['role'] = user['role']
@@ -250,7 +260,7 @@ def login():
                 return redirect(url_for('dashboard'))
 
         # FAILED LOGIN - RECORD ATTEMPT
-        record_failed_attempt(ip)
+        record_failed_attempt_db(ip)
         flash('Invalid email or password.', 'danger')
 
     return render_template('login.html')
