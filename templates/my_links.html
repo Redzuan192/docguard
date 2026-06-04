@@ -6,8 +6,8 @@
         <h1>My Share Links</h1>
         <p>Manage your shared document links</p>
     </div>
-    <div>
-        <button onclick="location.reload()" class="btn btn-outline-custom me-2">
+    <div class="d-flex gap-2">
+        <button onclick="location.reload()" class="btn btn-outline-custom">
             <i class="bi bi-arrow-repeat"></i> Refresh
         </button>
         <a href="{{ url_for('my_files') }}" class="btn btn-outline-custom">
@@ -34,33 +34,41 @@
                 </thead>
                 <tbody>
                     {% for link in links %}
-                    <tr id="link-{{ link.id }}">
-                        <td><strong>{{ link.original_filename }}</strong></td>
-                        <td><code style="font-size: 0.7rem;">{{ link.token[:20] }}...</code></td>
-                        <td>{{ link.expiry_date.strftime('%d %b %Y, %H:%M') if link.expiry_date else 'N/A' }}</td>
-                        <td class="views-count" id="views-{{ link.id }}">
+                    <tr>
+                        <td class="fw-semibold">{{ link.original_filename }}</td>
+                        <td><code class="small">{{ link.token[:20] }}...</code></td>
+                        <td class="small">{{ link.expiry_date.strftime('%d %b %Y, %H:%M') if link.expiry_date else 'N/A' }}</td>
+                        <td>
                             {% if link.max_views == 999999 %}
-                                {{ link.used_views }} / ∞
+                                <span class="badge bg-secondary">{{ link.used_views }} / ∞</span>
                             {% else %}
-                                {{ link.used_views }} / {{ link.max_views }}
+                                <span class="badge {% if link.used_views >= link.max_views %}bg-danger{% else %}bg-secondary{% endif %}">
+                                    {{ link.used_views }} / {{ link.max_views }}
+                                </span>
                             {% endif %}
                         </td>
-                        <td>{% if link.allow_download %}<span class="badge-active">Yes</span>{% else %}<span class="badge-inactive">No</span>{% endif %}</td>
+                        <td>{% if link.allow_download %}<span class="badge bg-success">Yes</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}</td>
                         <td>
                             {% if link.is_active and link.used_views < link.max_views %}
-                                <span class="badge-active">Active</span>
+                                <span class="badge bg-success">Active</span>
                             {% else %}
-                                <span class="badge-inactive">Inactive</span>
+                                <span class="badge bg-secondary">Inactive</span>
                             {% endif %}
                         </td>
                         <td>
-                            <a href="{{ url_for('edit_link', link_id=link.id) }}" class="btn btn-primary-custom btn-sm">Edit</a>
-                            <form method="POST" action="{{ url_for('cancel_link', link_id=link.id) }}" style="display: inline;">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-danger-custom btn-sm" onclick="return confirm('Revoke this link permanently?')">Revoke</button>
-                            </form>
+                            <div class="d-flex gap-2">
+                                <a href="{{ url_for('edit_link', link_id=link.id) }}" class="btn btn-primary-custom btn-sm">
+                                    <i class="bi bi-pencil"></i> Edit
+                                </a>
+                                <form method="POST" action="{{ url_for('cancel_link', link_id=link.id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-danger-custom btn-sm" onclick="return confirm('Revoke this link permanently?')">
+                                        <i class="bi bi-x-circle"></i> Revoke
+                                    </button>
+                                </form>
+                            </div>
                         </td>
-                    <tr>
+                    </tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -74,6 +82,4 @@
         {% endif %}
     </div>
 </div>
-
-<!-- No auto refresh - manual refresh only -->
 {% endblock %}
