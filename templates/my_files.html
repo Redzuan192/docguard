@@ -1,39 +1,77 @@
 {% extends 'base.html' %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div class="page-header mb-0">
-        <h1>My Files</h1>
-        <p>Manage your uploaded documents</p>
+        <h1>My Share Links</h1>
+        <p>Manage, copy, edit, and revoke your shared document links</p>
     </div>
-    <a href="{{ url_for('upload_file') }}" class="btn btn-primary-custom">
-        <i class="bi bi-cloud-upload"></i> Upload New
-    </a>
+    <div>
+        <button onclick="location.reload()" class="btn btn-outline-custom me-2">
+            <i class="bi bi-arrow-repeat"></i> Refresh
+        </button>
+        <a href="{{ url_for('my_files') }}" class="btn btn-outline-custom">
+            <i class="bi bi-folder"></i> Back to Files
+        </a>
+    </div>
 </div>
 
 <div class="card-modern">
     <div class="card-body p-0">
-        {% if files %}
+        {% if links %}
         <div class="table-responsive">
             <table class="table-modern">
                 <thead>
                     <tr>
-                        <th>TITLE</th>
-                        <th>FILENAME</th>
-                        <th>CREATED</th>
+                        <th>FILE</th>
+                        <th>SHARE LINK</th>
+                        <th>EXPIRY DATE</th>
+                        <th>VIEWS</th>
+                        <th>DOWNLOAD</th>
+                        <th>STATUS</th>
                         <th>ACTIONS</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for file in files %}
-                    <tr>
-                        <td><strong>{{ file.title or '-' }}</strong></td>
-                        <td>{{ file.original_filename }}</td>
-                        <td>{{ file.created_at.strftime('%d %b %Y, %H:%M') if file.created_at else file.created_at }}</td>
+                    {% for link in links %}
+                    {% set share_url = request.host_url.rstrip('/') ~ url_for('shared_access', token=link.token) %}
+                    <tr id="link-{{ link.id }}" {% if new_link_id == link.id %}style="background: #eff6ff;"{% endif %}>
                         <td>
-                            <a href="{{ url_for('share_file', file_id=file.id) }}" class="btn btn-primary-custom btn-sm me-1">Share</a>
-                            <form method="POST" action="{{ url_for('delete_file', file_id=file.id) }}" style="display: inline;">
+                            <strong>{{ link.original_filename }}</strong>
+                            {% if new_link_id == link.id %}
+                                <br><span class="badge-active" style="background: #3b82f6;">New Link</span>
+                            {% endif %}
+                        </td>
+                        <td style="min-width: 340px;">
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control form-modern" value="{{ share_url }}" id="share-url-{{ link.id }}" readonly>
+                                <button type="button" class="btn btn-primary-custom" onclick="copyShareLink('{{ link.id }}')">
+                                    <i class="bi bi-clipboard"></i> Copy
+                                </button>
+                            </div>
+                            <small class="text-muted" style="font-size: 0.7rem;">Token: {{ link.token[:20] }}...</small>
+                        </td>
+                        <td>{{ link.expiry_date.strftime('%d %b %Y, %H:%M') if link.expiry_date else 'N/A' }}</td>
+                        <td class="views-count" id="views-{{ link.id }}">
+                            {% if link.max_views == 999999 %}
+                                {{ link.used_views }} / ∞
+                            {% else %}
+                                {{ link.used_views }} / {{ link.max_views }}
+                            {% endif %}
+                        </td>
+                        <td>{% if link.allow_download %}<span class="badge-active">Yes</span>{% else %}<span class="badge-inactive">No</span>{% endif %}</td>
+                        <td>
+                            {% if link.is_active and link.used_views < link.max_views %}
+                                <span class="badge-active">Active</span>
+                            {% else %}
+                                <span class="badge-inactive">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td style="white-space: nowrap;">
+                            <a href="{{ url_for('edit_link', link_id=link.id) }}" class="btn btn-primary-custom btn-sm">Edit</a>
+                            <form method="POST" action="{{ url_for('cancel_link', link_id=link.id) }}" style="display: inline;">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-danger-custom btn-sm" onclick="return confirm('Delete this file permanently?')">Delete</button>
+                                <button type="submit" class="btn btn-danger-custom btn-sm" onclick="return confirm('Revoke this link permanently?')">Revoke</button>
                             </form>
                         </td>
                     </tr>
@@ -43,11 +81,25 @@
         </div>
         {% else %}
         <div class="empty-state">
-            <i class="bi bi-folder2-open"></i>
-            <p>No files uploaded yet</p>
-            <a href="{{ url_for('upload_file') }}" class="btn btn-primary-custom">Upload Your First File</a>
+            <i class="bi bi-link"></i>
+            <p>No share links created yet</p>
+            <a href="{{ url_for('upload_file') }}" class="btn btn-primary-custom">Upload a file first</a>
         </div>
         {% endif %}
     </div>
 </div>
+
+<script>
+function copyShareLink(linkId) {
+    const input = document.getElementById('share-url-' + linkId);
+    input.select();
+    input.setSelectionRange(0, 99999);
+    navigator.clipboard.writeText(input.value).then(function() {
+        alert('Share link copied to clipboard.');
+    }).catch(function() {
+        document.execCommand('copy');
+        alert('Share link copied to clipboard.');
+    });
+}
+</script>
 {% endblock %}
