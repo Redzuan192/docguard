@@ -4,7 +4,7 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div class="page-header mb-0">
         <h1>My Share Links</h1>
-        <p>Manage your shared document links</p>
+        <p>Manage, copy, edit, and revoke your shared document links</p>
     </div>
     <div class="d-flex gap-2">
         <button onclick="location.reload()" class="btn btn-outline-custom">
@@ -24,7 +24,7 @@
                 <thead>
                     <tr>
                         <th>FILE</th>
-                        <th>TOKEN</th>
+                        <th>SHARE LINK</th>
                         <th>EXPIRY DATE</th>
                         <th>VIEWS</th>
                         <th>DOWNLOAD</th>
@@ -34,29 +34,48 @@
                 </thead>
                 <tbody>
                     {% for link in links %}
-                    <tr>
-                        <td class="fw-semibold">{{ link.original_filename }}</td>
-                        <td><code class="small">{{ link.token[:20] }}...</code></td>
+                    {% set share_url = request.host_url.rstrip('/') ~ url_for('shared_access', token=link.token) %}
+                    <tr id="link-{{ link.id }}" {% if new_link_id == link.id %}style="background: #eff6ff;"{% endif %}>
+                        <td class="fw-semibold">
+                            {{ link.original_filename }}
+                            {% if new_link_id == link.id %}
+                                <br><span class="badge-active" style="background: #3b82f6;">New Link</span>
+                            {% endif %}
+                        </td>
+                        <td style="min-width: 380px;">
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control form-modern" value="{{ share_url }}" id="share-url-{{ link.id }}" readonly>
+                                <button type="button" class="btn btn-primary-custom" onclick="copyShareLink('{{ link.id }}')">
+                                    <i class="bi bi-clipboard"></i> Copy
+                                </button>
+                            </div>
+                            <small class="text-muted" style="font-size: 0.7rem;">Token: {{ link.token[:20] }}...</small>
+                        </td>
                         <td class="small">{{ link.expiry_date.strftime('%d %b %Y, %H:%M') if link.expiry_date else 'N/A' }}</td>
                         <td>
                             {% if link.max_views == 999999 %}
-                                <span class="badge bg-secondary">{{ link.used_views }} / ∞</span>
+                                <span class="badge-inactive">{{ link.used_views }} / ∞</span>
                             {% else %}
-                                <span class="badge {% if link.used_views >= link.max_views %}bg-danger{% else %}bg-secondary{% endif %}">
-                                    {{ link.used_views }} / {{ link.max_views }}
-                                </span>
+                                {% if link.used_views >= link.max_views %}
+                                    <span class="badge-warning">{{ link.used_views }} / {{ link.max_views }}</span>
+                                {% else %}
+                                    <span class="badge-inactive">{{ link.used_views }} / {{ link.max_views }}</span>
+                                {% endif %}
                             {% endif %}
                         </td>
-                        <td>{% if link.allow_download %}<span class="badge bg-success">Yes</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}</td>
+                        <td>{% if link.allow_download %}<span class="badge-active">Yes</span>{% else %}<span class="badge-inactive">No</span>{% endif %}</td>
                         <td>
                             {% if link.is_active and link.used_views < link.max_views %}
-                                <span class="badge bg-success">Active</span>
+                                <span class="badge-active">Active</span>
                             {% else %}
-                                <span class="badge bg-secondary">Inactive</span>
+                                <span class="badge-inactive">Inactive</span>
                             {% endif %}
                         </td>
-                        <td>
+                        <td style="white-space: nowrap;">
                             <div class="d-flex gap-2">
+                                <a href="{{ share_url }}" target="_blank" class="btn btn-outline-custom btn-sm">
+                                    <i class="bi bi-eye"></i> Preview
+                                </a>
                                 <a href="{{ url_for('edit_link', link_id=link.id) }}" class="btn btn-primary-custom btn-sm">
                                     <i class="bi bi-pencil"></i> Edit
                                 </a>
@@ -77,9 +96,29 @@
         <div class="empty-state">
             <i class="bi bi-link"></i>
             <p>No share links created yet</p>
-            <a href="{{ url_for('upload_file') }}" class="btn btn-primary-custom">Upload a file first</a>
+            <a href="{{ url_for('my_files') }}" class="btn btn-primary-custom">Go to My Files</a>
         </div>
         {% endif %}
     </div>
 </div>
+
+<script>
+function copyShareLink(linkId) {
+    const input = document.getElementById('share-url-' + linkId);
+    input.select();
+    input.setSelectionRange(0, 99999);
+
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(input.value).then(function() {
+            alert('Share link copied to clipboard.');
+        }).catch(function() {
+            document.execCommand('copy');
+            alert('Share link copied to clipboard.');
+        });
+    } else {
+        document.execCommand('copy');
+        alert('Share link copied to clipboard.');
+    }
+}
+</script>
 {% endblock %}

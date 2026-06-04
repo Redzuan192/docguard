@@ -20,6 +20,7 @@
                     <tr>
                         <th>TITLE</th>
                         <th>FILENAME</th>
+                        <th>ENCRYPTION</th>
                         <th>CREATED</th>
                         <th>ACTIONS</th>
                     </tr>
@@ -28,7 +29,18 @@
                     {% for file in files %}
                     <tr>
                         <td class="fw-semibold">{{ file.title or '-' }}</td>
-                        <td>{{ file.original_filename }}</td>
+                        <td>
+                            {{ file.original_filename }}
+                            <br>
+                            <small class="text-muted">Stored as: {{ file.stored_filename }}</small>
+                        </td>
+                        <td>
+                            {% if file.stored_filename and file.stored_filename.endswith('.enc') %}
+                                <span class="badge-active"><i class="bi bi-lock-fill"></i> Encrypted</span>
+                            {% else %}
+                                <span class="badge-inactive"><i class="bi bi-unlock"></i> Not Encrypted</span>
+                            {% endif %}
+                        </td>
                         <td class="text-muted small">{{ file.created_at.strftime('%d %b %Y, %H:%M') if file.created_at else file.created_at }}</td>
                         <td>
                             <div class="d-flex gap-2">
