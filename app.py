@@ -3,8 +3,10 @@ import uuid
 import mysql.connector
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, flash, session, send_from_directory, abort, Response
+from datetime import datetime, timedelta
+from flask import Flask, render_template, request, redirect, url_for, flash, session, abort, Response
+from cryptography.fernet import Fernet, InvalidToken
+from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_wtf.csrf import CSRFProtect
 
@@ -28,8 +30,17 @@ def csrf_error(e):
 UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# File encryption key. In production/Railway, set FILE_ENCRYPTION_KEY in environment variables.
+# For local development, the system will read encryption_key.key or create one automatically.
+ENCRYPTION_KEY_FILE = os.environ.get('ENCRYPTION_KEY_FILE', 'encryption_key.key')
+
 ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'png', 'jpg', 'jpeg'}
 MAX_FILE_SIZE = 16 * 1024 * 1024
+
+# Login rate limiting configuration: 3 failed attempts = 2 minutes lock.
+MAX_LOGIN_ATTEMPTS = 3
+LOGIN_LOCKOUT_MINUTES = 2
+login_attempts = {}
 
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -99,6 +110,63 @@ def execute_query(query, params=None):
 # =====================
 # FUNGSI PEMBANTU
 # =====================
+def load_encryption_key():
+    key = os.environ.get('FILE_ENCRYPTION_KEY')
+    if key:
+        return key.encode()
+
+    if os.path.exists(ENCRYPTION_KEY_FILE):
+        with open(ENCRYPTION_KEY_FILE, 'rb') as key_file:
+            return key_file.read().strip()
+
+    key = Fernet.generate_key()
+    with open(ENCRYPTION_KEY_FILE, 'wb') as key_file:
+        key_file.write(key)
+    return key
+
+fernet = Fernet(load_encryption_key())
+
+def encrypt_file_data(file_data):
+    return fernet.encrypt(file_data)
+
+def decrypt_file_data(encrypted_data):
+    return fernet.decrypt(encrypted_data)
+
+def get_client_ip():
+    return request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
+
+def get_login_key(email):
+    return f"{get_client_ip()}:{email}"
+
+def is_login_locked(email):
+    record = login_attempts.get(get_login_key(email))
+    if not record:
+        return False, 0
+
+    locked_until = record.get('locked_until')
+    if locked_until and datetime.now() < locked_until:
+        remaining = int((locked_until - datetime.now()).total_seconds())
+        return True, remaining
+
+    if locked_until and datetime.now() >= locked_until:
+        login_attempts.pop(get_login_key(email), None)
+
+    return False, 0
+
+def record_failed_login(email):
+    key = get_login_key(email)
+    record = login_attempts.get(key, {'count': 0, 'locked_until': None})
+    record['count'] += 1
+
+    if record['count'] >= MAX_LOGIN_ATTEMPTS:
+        record['locked_until'] = datetime.now() + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
+
+    login_attempts[key] = record
+    return record
+
+def clear_failed_login(email):
+    login_attempts.pop(get_login_key(email), None)
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -106,7 +174,8 @@ def generate_token():
     return uuid.uuid4().hex + uuid.uuid4().hex[:8]
 
 def unique_filename(filename):
-    ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+    safe_name = secure_filename(filename)
+    ext = safe_name.rsplit('.', 1)[1].lower() if '.' in safe_name else ''
     return f"{uuid.uuid4().hex}.{ext}" if ext else uuid.uuid4().hex
 
 def is_logged_in():
@@ -180,14 +249,25 @@ def login():
     if request.method == 'POST':
         email = request.form['email'].strip().lower()
         password = request.form['password']
-        ip = request.remote_addr
+        ip = get_client_ip()
+
+        locked, remaining_seconds = is_login_locked(email)
+        if locked:
+            flash(f'Too many failed login attempts. Please wait {remaining_seconds} seconds before trying again.', 'danger')
+            return redirect(url_for('login'))
         
         user = fetch_one("SELECT * FROM users WHERE email=%s", (email,))
         if not user or int(user.get('is_active', 0)) != 1:
-            flash('Invalid email or password.', 'danger')
+            record = record_failed_login(email)
+            add_log(None, None, 'LOGIN_FAILED', f'Failed login attempt for email: {email}', ip)
+            if record.get('locked_until'):
+                flash(f'Too many failed login attempts. Please wait {LOGIN_LOCKOUT_MINUTES} minutes before trying again.', 'danger')
+            else:
+                flash('Invalid email or password.', 'danger')
             return redirect(url_for('login'))
         
         if check_password_hash(user['password_hash'], password):
+            clear_failed_login(email)
             session['user_id'] = user['id']
             session['full_name'] = user['full_name']
             session['role'] = user['role']
@@ -197,8 +277,15 @@ def login():
                 return redirect(url_for('admin_dashboard'))
             else:
                 return redirect(url_for('dashboard'))
-        
-        flash('Invalid email or password.', 'danger')
+
+        record = record_failed_login(email)
+        add_log(user['id'], None, 'LOGIN_FAILED', 'Failed login attempt: incorrect password.', ip)
+        if record.get('locked_until'):
+            flash(f'Too many failed login attempts. Please wait {LOGIN_LOCKOUT_MINUTES} minutes before trying again.', 'danger')
+        else:
+            remaining_attempts = MAX_LOGIN_ATTEMPTS - record['count']
+            flash(f'Invalid email or password. {remaining_attempts} attempt(s) remaining before temporary lock.', 'danger')
+        return redirect(url_for('login'))
     
     return render_template('login.html')
 
@@ -258,8 +345,9 @@ def upload_file():
         stored_filename = unique_filename(file.filename)
         file_path = os.path.join(UPLOAD_FOLDER, stored_filename)
         
+        encrypted_data = encrypt_file_data(file_data)
         with open(file_path, 'wb') as f:
-            f.write(file_data)
+            f.write(encrypted_data)
         
         database_url = os.environ.get('DATABASE_URL')
         if database_url:
@@ -426,10 +514,22 @@ def download_shared_file(token):
     if not link or not link.get('allow_download'):
         abort(403)
     
-    add_log(None, link['file_id'], 'FILE_DOWNLOAD', f'Downloaded: {link["original_filename"]}', request.remote_addr)
-    
-    return send_from_directory(UPLOAD_FOLDER, link['stored_filename'], 
-                             as_attachment=True, download_name=link['original_filename'])
+    file_path = link.get('file_path') or os.path.join(UPLOAD_FOLDER, link['stored_filename'])
+    if not os.path.exists(file_path):
+        abort(404)
+
+    try:
+        with open(file_path, 'rb') as f:
+            encrypted_data = f.read()
+        decrypted_data = decrypt_file_data(encrypted_data)
+    except InvalidToken:
+        abort(500, description='File decryption failed. Encryption key may be invalid.')
+
+    add_log(None, link['file_id'], 'FILE_DOWNLOAD', f'Downloaded: {link["original_filename"]}', get_client_ip())
+
+    response = Response(decrypted_data, mimetype='application/octet-stream')
+    response.headers['Content-Disposition'] = f'attachment; filename="{link["original_filename"]}"'
+    return response
 
 # =====================
 # ROUTES - MANAGE SHARE LINKS
