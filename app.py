@@ -239,7 +239,7 @@ def register():
 @app.route('/logout')
 def logout():
     if is_logged_in():
-        add_log(session['user_id'], None, 'LOGOUT', 'User logged out.', request.remote_addr)
+        add_log(session['user_id'], None, 'LOGOUT', 'User logged out.', get_client_ip())
         session.clear()
         flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
@@ -342,7 +342,7 @@ def upload_file():
             flash('File too large (max 16MB).', 'danger')
             return redirect(url_for('upload_file'))
         
-        stored_filename = unique_filename(file.filename)
+        stored_filename = unique_filename(file.filename) + '.enc'
         file_path = os.path.join(UPLOAD_FOLDER, stored_filename)
         
         encrypted_data = encrypt_file_data(file_data)
@@ -357,8 +357,9 @@ def upload_file():
             file_id = execute_query("INSERT INTO files (title, original_filename, stored_filename, file_path, uploaded_by) VALUES (%s,%s,%s,%s,%s)", 
                                     (title or file.filename, file.filename, stored_filename, file_path, session['user_id']))
         
-        add_log(session['user_id'], file_id, 'FILE_UPLOAD', f'Uploaded: {file.filename}', request.remote_addr)
-        flash('File uploaded successfully.', 'success')
+        add_log(session['user_id'], file_id, 'FILE_UPLOAD', f'Uploaded: {file.filename}', get_client_ip())
+        add_log(session['user_id'], file_id, 'FILE_ENCRYPTED', f'Encrypted and stored: {stored_filename}', get_client_ip())
+        flash('File uploaded and encrypted successfully.', 'success')
         return redirect(url_for('my_files'))
     
     return render_template('upload.html')
@@ -411,22 +412,22 @@ def share_file(file_id):
         token = generate_token()
         password_hash = generate_password_hash(password, method='pbkdf2:sha256:600000') if password else None
         
-        execute_query("""INSERT INTO share_links 
-            (file_id, token, expiry_date, max_views, used_views, allow_download, password_hash, is_active, created_by)
-            VALUES (%s, %s, %s, %s, 0, %s, %s, 1, %s) RETURNING id""",
-            (file_id, token, expiry_date, max_views, allow_download, password_hash, session['user_id']))
-        
-        add_log(session['user_id'], file_id, 'LINK_CREATED', f'Created share link for: {file["original_filename"]}', request.remote_addr)
-        
-        host = request.host
-        link_url = f"https://{host}/shared/{token}"
-        
-        if password:
-            flash(f'Share link created (password protected): {link_url}', 'success')
+        database_url = os.environ.get('DATABASE_URL')
+        if database_url:
+            link_id = execute_query("""INSERT INTO share_links 
+                (file_id, token, expiry_date, max_views, used_views, allow_download, password_hash, is_active, created_by)
+                VALUES (%s, %s, %s, %s, 0, %s, %s, 1, %s) RETURNING id""",
+                (file_id, token, expiry_date, max_views, allow_download, password_hash, session['user_id']))
         else:
-            flash(f'Share link created: {link_url}', 'success')
+            link_id = execute_query("""INSERT INTO share_links 
+                (file_id, token, expiry_date, max_views, used_views, allow_download, password_hash, is_active, created_by)
+                VALUES (%s, %s, %s, %s, 0, %s, %s, 1, %s)""",
+                (file_id, token, expiry_date, max_views, allow_download, password_hash, session['user_id']))
         
-        return redirect(url_for('my_files'))
+        add_log(session['user_id'], file_id, 'LINK_CREATED', f'Created share link for: {file["original_filename"]}', get_client_ip())
+        
+        flash('Share link created successfully. You can view and copy it from My Share Links.', 'success')
+        return redirect(url_for('my_links', new_link_id=link_id))
     
     return render_template('share_file.html', file=file)
 
@@ -547,7 +548,7 @@ def my_links():
         ORDER BY sl.created_at DESC
     """, (session['user_id'],))
     
-    return render_template('my_links.html', links=links)
+    return render_template('my_links.html', links=links, new_link_id=request.args.get('new_link_id', type=int))
 
 @app.route('/edit-link/<int:link_id>', methods=['GET', 'POST'])
 def edit_link(link_id):
