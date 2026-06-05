@@ -47,7 +47,7 @@
                 <thead>
                     <tr>
                         <th>DATE & TIME</th>
-                        <th>USER</th>
+                        <th>USER / RECIPIENT</th>
                         <th>FILE</th>
                         <th>ACTION</th>
                         <th>IP ADDRESS</th>
@@ -57,7 +57,13 @@
                     {% for log in recent_logs %}
                     <tr>
                         <td>{{ log.created_at.strftime('%d/%m/%Y %H:%M') if log.created_at else log.created_at }}</td>
-                        <td>{% if log.full_name %}{{ log.full_name }}{% else %}<span class="text-muted">Anonymous</span>{% endif %}</td>
+                        <td>
+                            {% if log.display_user and log.display_user != 'Anonymous' %}
+                                {{ log.display_user }}
+                            {% else %}
+                                <span class="text-muted">Anonymous</span>
+                            {% endif %}
+                        </td>
                         <td>{{ log.original_filename or '-' }}</td>
                         <td><span class="badge-inactive">{{ log.action }}</span></td>
                         <td><code>{{ log.ip_address or '-' }}</code></td>

@@ -176,7 +176,8 @@ def generate_token():
 def unique_filename(filename):
     safe_name = secure_filename(filename)
     ext = safe_name.rsplit('.', 1)[1].lower() if '.' in safe_name else ''
-    return f"{uuid.uuid4().hex}.{ext}" if ext else uuid.uuid4().hex
+    # Store encrypted files with .enc extension so the UI can show encryption status clearly.
+    return f"{uuid.uuid4().hex}.{ext}.enc" if ext else f"{uuid.uuid4().hex}.enc"
 
 def is_logged_in():
     return 'user_id' in session
@@ -189,6 +190,60 @@ def add_log(user_id, file_id, action, description, ip_address):
         "INSERT INTO audit_logs (user_id, file_id, action, description, ip_address) VALUES (%s, %s, %s, %s, %s)",
         (user_id, file_id, action, description, ip_address)
     )
+
+
+def is_encrypted_file_record(file_record):
+    """Return True if the stored file is encrypted.
+
+    New encrypted uploads end with .enc. For older encrypted files that were
+    saved without the .enc extension, we also check for the Fernet token prefix
+    gAAAAA in the stored file content.
+    """
+    stored_filename = file_record.get('stored_filename') or ''
+    if stored_filename.endswith('.enc'):
+        return True
+
+    file_path = file_record.get('file_path') or os.path.join(UPLOAD_FOLDER, stored_filename)
+    try:
+        with open(file_path, 'rb') as f:
+            return f.read(6).startswith(b'gAAAAA')
+    except Exception:
+        return False
+
+
+def extract_recipient_display_name(description):
+    """Extract recipient name from audit log description for admin display."""
+    if not description:
+        return None
+
+    prefixes = [
+        'Recipient registered: ',
+        'Viewed by ',
+        'Downloaded by ',
+    ]
+    for prefix in prefixes:
+        if description.startswith(prefix):
+            value = description[len(prefix):]
+            # Expected format: Name (email): filename or Name (email) for filename
+            if ' (' in value:
+                name = value.split(' (', 1)[0].strip()
+                return name or 'Recipient'
+            return value.split(':', 1)[0].strip() or 'Recipient'
+    return None
+
+
+def prepare_log_display(logs):
+    """Add display_user to logs so recipient actions do not appear as Anonymous."""
+    for log in logs:
+        if log.get('full_name'):
+            log['display_user'] = log.get('full_name')
+        else:
+            recipient_name = extract_recipient_display_name(log.get('description'))
+            if recipient_name:
+                log['display_user'] = f'{recipient_name} (Recipient)'
+            else:
+                log['display_user'] = 'Anonymous'
+    return logs
 
 # =====================
 # ROUTES - AUTHENTICATION
@@ -369,6 +424,8 @@ def my_files():
         return redirect(url_for('login'))
     
     files = fetch_all("SELECT * FROM files WHERE uploaded_by = %s ORDER BY created_at DESC", (session['user_id'],))
+    for file in files:
+        file['is_encrypted_display'] = is_encrypted_file_record(file)
     return render_template('my_files.html', files=files)
 
 @app.route('/delete-file/<int:file_id>', methods=['POST'])
@@ -611,7 +668,18 @@ def download_shared_file(token):
     except InvalidToken:
         abort(500, description='File decryption failed. Encryption key may be invalid.')
 
-    add_log(None, link['file_id'], 'FILE_DOWNLOAD', f'Downloaded: {link["original_filename"]}', get_client_ip())
+    recipient_key = f"recipient_{token}"
+    recipient = session.get(recipient_key, {})
+    recipient_name = recipient.get('name', 'Unknown recipient')
+    recipient_email = recipient.get('email', 'Unknown email')
+
+    add_log(
+        None,
+        link['file_id'],
+        'FILE_DOWNLOAD',
+        f'Downloaded by {recipient_name} ({recipient_email}): {link["original_filename"]}',
+        get_client_ip()
+    )
 
     response = Response(decrypted_data, mimetype='application/octet-stream')
     response.headers['Content-Disposition'] = f'attachment; filename="{link["original_filename"]}"'
@@ -798,6 +866,7 @@ def admin_dashboard():
         ORDER BY al.created_at DESC
         LIMIT 10
     """)
+    recent_logs = prepare_log_display(recent_logs)
     
     return render_template('admin_dashboard.html',
         total_users=total_users,
@@ -862,6 +931,7 @@ def admin_logs():
     query += " ORDER BY al.created_at DESC LIMIT 200"
     
     logs = fetch_all(query, params)
+    logs = prepare_log_display(logs)
     return render_template('admin_logs.html', logs=logs, keyword=keyword, action=action_filter)
 
 @app.route('/admin/reports')
