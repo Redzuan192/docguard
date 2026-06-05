@@ -239,7 +239,7 @@ def register():
 @app.route('/logout')
 def logout():
     if is_logged_in():
-        add_log(session['user_id'], None, 'LOGOUT', 'User logged out.', get_client_ip())
+        add_log(session['user_id'], None, 'LOGOUT', 'User logged out.', request.remote_addr)
         session.clear()
         flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
@@ -342,7 +342,7 @@ def upload_file():
             flash('File too large (max 16MB).', 'danger')
             return redirect(url_for('upload_file'))
         
-        stored_filename = unique_filename(file.filename) + '.enc'
+        stored_filename = unique_filename(file.filename)
         file_path = os.path.join(UPLOAD_FOLDER, stored_filename)
         
         encrypted_data = encrypt_file_data(file_data)
@@ -357,9 +357,8 @@ def upload_file():
             file_id = execute_query("INSERT INTO files (title, original_filename, stored_filename, file_path, uploaded_by) VALUES (%s,%s,%s,%s,%s)", 
                                     (title or file.filename, file.filename, stored_filename, file_path, session['user_id']))
         
-        add_log(session['user_id'], file_id, 'FILE_UPLOAD', f'Uploaded: {file.filename}', get_client_ip())
-        add_log(session['user_id'], file_id, 'FILE_ENCRYPTED', f'Encrypted and stored: {stored_filename}', get_client_ip())
-        flash('File uploaded and encrypted successfully.', 'success')
+        add_log(session['user_id'], file_id, 'FILE_UPLOAD', f'Uploaded: {file.filename}', request.remote_addr)
+        flash('File uploaded successfully.', 'success')
         return redirect(url_for('my_files'))
     
     return render_template('upload.html')
@@ -412,22 +411,22 @@ def share_file(file_id):
         token = generate_token()
         password_hash = generate_password_hash(password, method='pbkdf2:sha256:600000') if password else None
         
-        database_url = os.environ.get('DATABASE_URL')
-        if database_url:
-            link_id = execute_query("""INSERT INTO share_links 
-                (file_id, token, expiry_date, max_views, used_views, allow_download, password_hash, is_active, created_by)
-                VALUES (%s, %s, %s, %s, 0, %s, %s, 1, %s) RETURNING id""",
-                (file_id, token, expiry_date, max_views, allow_download, password_hash, session['user_id']))
+        execute_query("""INSERT INTO share_links 
+            (file_id, token, expiry_date, max_views, used_views, allow_download, password_hash, is_active, created_by)
+            VALUES (%s, %s, %s, %s, 0, %s, %s, 1, %s) RETURNING id""",
+            (file_id, token, expiry_date, max_views, allow_download, password_hash, session['user_id']))
+        
+        add_log(session['user_id'], file_id, 'LINK_CREATED', f'Created share link for: {file["original_filename"]}', request.remote_addr)
+        
+        host = request.host
+        link_url = f"https://{host}/shared/{token}"
+        
+        if password:
+            flash(f'Share link created (password protected): {link_url}', 'success')
         else:
-            link_id = execute_query("""INSERT INTO share_links 
-                (file_id, token, expiry_date, max_views, used_views, allow_download, password_hash, is_active, created_by)
-                VALUES (%s, %s, %s, %s, 0, %s, %s, 1, %s)""",
-                (file_id, token, expiry_date, max_views, allow_download, password_hash, session['user_id']))
+            flash(f'Share link created: {link_url}', 'success')
         
-        add_log(session['user_id'], file_id, 'LINK_CREATED', f'Created share link for: {file["original_filename"]}', get_client_ip())
-        
-        flash('Share link created successfully. You can view and copy it from My Share Links.', 'success')
-        return redirect(url_for('my_links', new_link_id=link_id))
+        return redirect(url_for('my_files'))
     
     return render_template('share_file.html', file=file)
 
@@ -466,30 +465,116 @@ def shared_access(token):
     
     if int(link['used_views']) >= int(link['max_views']):
         return render_template('shared_access.html', error='Maximum Views Reached', link=None)
-    
+
+    # Every shared link access must identify the recipient first.
+    recipient_key = f"recipient_{token}"
+    password_key = f"password_verified_{token}"
+
+    # STEP 1: Recipient verification form submission
+    if request.method == 'POST' and request.form.get('step') == 'recipient':
+        recipient_name = request.form.get('recipient_name', '').strip()
+        recipient_email = request.form.get('recipient_email', '').strip().lower()
+
+        if not recipient_name or not recipient_email:
+            flash('Please enter your name and email.', 'danger')
+            return render_template(
+                'shared_access.html',
+                link=link,
+                error=None,
+                require_recipient=True,
+                require_password=False
+            )
+
+        session[recipient_key] = {
+            'name': recipient_name,
+            'email': recipient_email
+        }
+
+        # Store recipient identity for document-owner monitoring.
+        execute_query("""
+            INSERT INTO link_recipients (link_id, full_name, email)
+            VALUES (%s, %s, %s)
+        """, (link['link_id'], recipient_name, recipient_email))
+
+        add_log(
+            None,
+            link['file_id'],
+            'RECIPIENT_REGISTERED',
+            f'Recipient registered: {recipient_name} ({recipient_email}) for {link["original_filename"]}',
+            get_client_ip()
+        )
+
+        # If this link has a password, continue to password step after recipient registration.
+        if link.get('password_hash'):
+            return render_template(
+                'shared_access.html',
+                link=link,
+                error=None,
+                require_recipient=False,
+                require_password=True
+            )
+
+    # Force recipient registration before viewing the file.
+    if recipient_key not in session:
+        return render_template(
+            'shared_access.html',
+            link=link,
+            error=None,
+            require_recipient=True,
+            require_password=False
+        )
+
+    # STEP 2: Password verification if the sharing link is password protected.
     password_hash = link.get('password_hash')
-    if password_hash:
-        if request.method == 'POST':
+    if password_hash and password_key not in session:
+        if request.method == 'POST' and request.form.get('step') == 'password':
             if not check_password_hash(password_hash, request.form.get('link_password', '')):
                 flash('Incorrect password.', 'danger')
-                return render_template('shared_access.html', link=link, error=None, require_password=True)
-            
-            current_views = int(link['used_views']) if link['used_views'] is not None else 0
-            new_views = current_views + 1
-            execute_query("UPDATE share_links SET used_views = %s WHERE id = %s", (new_views, link['link_id']))
-            add_log(None, link['file_id'], 'FILE_VIEW', f'Viewed: {link["original_filename"]}', request.remote_addr)
-            link['used_views'] = new_views
-            return render_template('shared_access.html', link=link, error=None, require_password=False)
+                return render_template(
+                    'shared_access.html',
+                    link=link,
+                    error=None,
+                    require_recipient=False,
+                    require_password=True
+                )
+            session[password_key] = True
         else:
-            return render_template('shared_access.html', link=link, error=None, require_password=True)
-    
+            return render_template(
+                'shared_access.html',
+                link=link,
+                error=None,
+                require_recipient=False,
+                require_password=True
+            )
+
+    # STEP 3: Access granted. Count the view and write audit log.
     current_views = int(link['used_views']) if link['used_views'] is not None else 0
     new_views = current_views + 1
-    execute_query("UPDATE share_links SET used_views = %s WHERE id = %s", (new_views, link['link_id']))
-    add_log(None, link['file_id'], 'FILE_VIEW', f'Viewed: {link["original_filename"]}', request.remote_addr)
+    execute_query(
+        "UPDATE share_links SET used_views = %s WHERE id = %s",
+        (new_views, link['link_id'])
+    )
+
+    recipient = session.get(recipient_key, {})
+    recipient_name = recipient.get('name', 'Unknown')
+    recipient_email = recipient.get('email', 'Unknown')
+
+    add_log(
+        None,
+        link['file_id'],
+        'FILE_VIEW',
+        f'Viewed by {recipient_name} ({recipient_email}): {link["original_filename"]}',
+        get_client_ip()
+    )
+
     link['used_views'] = new_views
-    
-    return render_template('shared_access.html', link=link, error=None, require_password=False)
+    return render_template(
+        'shared_access.html',
+        link=link,
+        error=None,
+        require_recipient=False,
+        require_password=False
+    )
 
 @app.route('/download/<token>')
 def download_shared_file(token):
@@ -548,7 +633,33 @@ def my_links():
         ORDER BY sl.created_at DESC
     """, (session['user_id'],))
     
-    return render_template('my_links.html', links=links, new_link_id=request.args.get('new_link_id', type=int))
+    return render_template('my_links.html', links=links)
+
+
+@app.route('/link-recipients/<int:link_id>')
+def link_recipients(link_id):
+    if not is_logged_in():
+        return redirect(url_for('login'))
+
+    link = fetch_one("""
+        SELECT sl.*, f.original_filename
+        FROM share_links sl
+        JOIN files f ON f.id = sl.file_id
+        WHERE sl.id = %s AND sl.created_by = %s
+    """, (link_id, session['user_id']))
+
+    if not link:
+        flash('Link not found.', 'danger')
+        return redirect(url_for('my_links'))
+
+    recipients = fetch_all("""
+        SELECT full_name, email, access_time
+        FROM link_recipients
+        WHERE link_id = %s
+        ORDER BY access_time DESC
+    """, (link_id,))
+
+    return render_template('link_recipients.html', link=link, recipients=recipients)
 
 @app.route('/edit-link/<int:link_id>', methods=['GET', 'POST'])
 def edit_link(link_id):

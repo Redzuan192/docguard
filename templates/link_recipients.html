@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="page-header mb-0">
+        <h1>Recipient Access</h1>
+        <p>People who accessed: <strong>{{ link.original_filename }}</strong></p>
+    </div>
+
+    <a href="{{ url_for('my_links') }}" class="btn btn-outline-custom">
+        <i class="bi bi-arrow-left"></i> Back to My Links
+    </a>
+</div>
+
+<div class="card-modern">
+    <div class="card-body p-0">
+        {% if recipients %}
+        <div class="table-responsive">
+            <table class="table-modern mb-0">
+                <thead>
+                    <tr>
+                        <th>NAME</th>
+                        <th>EMAIL</th>
+                        <th>ACCESS TIME</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in recipients %}
+                    <tr>
+                        <td><strong>{{ r.full_name }}</strong></td>
+                        <td>{{ r.email }}</td>
+                        <td>{{ r.access_time.strftime('%d/%m/%Y %H:%M') if r.access_time else r.access_time }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="bi bi-person-lines-fill"></i>
+            <p>No recipient has accessed this link yet.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}

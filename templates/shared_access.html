@@ -11,17 +11,43 @@
                     <p style="font-size: 0.8rem; color: #64748b;">The shared document cannot be accessed.</p>
                     <a href="{{ url_for('home') }}" class="btn btn-primary-custom mt-3">Go Home</a>
                 {% else %}
-                    
-                    {% if require_password %}
+
+                    {% if require_recipient %}
+                        <i class="bi bi-person-check" style="font-size: 2.5rem; color: #3b82f6;"></i>
+                        <h3 style="font-size: 1.1rem; font-weight: 600; margin-top: 1rem;">Recipient Verification</h3>
+                        <p style="font-size: 0.8rem; color: #64748b;">Please enter your name and email before accessing this shared document.</p>
+
+                        <form method="POST" class="text-start mt-4">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="step" value="recipient">
+
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold" style="font-size: 0.8rem;">Full Name</label>
+                                <input type="text" name="recipient_name" class="form-control form-modern" placeholder="Enter your full name" required autofocus>
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="form-label fw-semibold" style="font-size: 0.8rem;">Email Address</label>
+                                <input type="email" name="recipient_email" class="form-control form-modern" placeholder="Enter your email address" required>
+                            </div>
+
+                            <div class="text-center">
+                                <button type="submit" class="btn btn-primary-custom px-4">
+                                    <i class="bi bi-arrow-right-circle"></i> Continue
+                                </button>
+                            </div>
+                        </form>
+
+                    {% elif require_password %}
                         <i class="bi bi-lock" style="font-size: 2.5rem; color: #3b82f6;"></i>
                         <h3 style="font-size: 1.1rem; font-weight: 600; margin-top: 1rem;">Password Protected Link</h3>
                         <p style="font-size: 0.8rem; color: #64748b;">This link is protected with a password.</p>
                         
                         <form method="POST">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="step" value="password">
                             <div class="mb-4">
-                                <input type="password" name="link_password" class="form-control form-modern" 
-                                       placeholder="Enter link password" required autofocus>
+                                <input type="password" name="link_password" class="form-control form-modern" placeholder="Enter link password" required autofocus>
                             </div>
                             <button type="submit" class="btn btn-primary-custom px-4">
                                 <i class="bi bi-unlock"></i> Unlock Document
@@ -37,8 +63,7 @@
                         </div>
                         
                         {% if link.allow_download %}
-                            <a href="{{ url_for('download_shared_file', token=link.token) }}" 
-                               class="btn btn-primary-custom mt-4 px-4">
+                            <a href="{{ url_for('download_shared_file', token=link.token) }}" class="btn btn-primary-custom mt-4 px-4">
                                 <i class="bi bi-download"></i> Download File
                             </a>
                         {% else %}
