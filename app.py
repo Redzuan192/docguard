@@ -245,6 +245,14 @@ def prepare_log_display(logs):
                 log['display_user'] = 'Anonymous'
     return logs
 
+
+def convert_to_malaysia_time(records, field='created_at'):
+    """Convert UTC timestamps from Railway/PostgreSQL to Malaysia time (UTC+8) for display."""
+    for record in records:
+        if record.get(field):
+            record[field] = record[field] + timedelta(hours=8)
+    return records
+
 # =====================
 # ROUTES - AUTHENTICATION
 # =====================
@@ -821,6 +829,7 @@ def export_logs():
     query += " ORDER BY al.created_at DESC"
     
     logs = fetch_all(query, params)
+    logs = convert_to_malaysia_time(logs)
     
     si = StringIO()
     writer = csv.writer(si)
@@ -838,7 +847,7 @@ def export_logs():
     
     output = si.getvalue()
     response = Response(output, mimetype='text/csv')
-    filename = f"audit_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    filename = f"audit_logs_{(datetime.utcnow() + timedelta(hours=8)).strftime('%Y%m%d_%H%M%S')}.csv"
     response.headers.set('Content-Disposition', 'attachment', filename=filename)
     
     add_log(session['user_id'], None, 'EXPORT_LOGS', f'Exported logs to CSV', request.remote_addr)
@@ -867,6 +876,7 @@ def admin_dashboard():
         LIMIT 10
     """)
     recent_logs = prepare_log_display(recent_logs)
+    recent_logs = convert_to_malaysia_time(recent_logs)
     
     return render_template('admin_dashboard.html',
         total_users=total_users,
@@ -932,6 +942,7 @@ def admin_logs():
     
     logs = fetch_all(query, params)
     logs = prepare_log_display(logs)
+    logs = convert_to_malaysia_time(logs)
     return render_template('admin_logs.html', logs=logs, keyword=keyword, action=action_filter)
 
 @app.route('/admin/reports')
