@@ -56,7 +56,8 @@
                     {% for log in recent_logs %}
                     <tr>
                         <td>{{ log.created_at.strftime('%d/%m/%Y %H:%M') if log.created_at else log.created_at }}</td>
-                        <td>{% if log.full_name %}{{ log.full_name }}{% else %}<span class="text-muted">Anonymous</span>{% endif %}</td>
+                        <td>{% if '(Recipient)' in log.display_user %}<span class="badge bg-info text-dark"> {{ log.display_user }}</span>
+                            {% else %}{{ log.display_user }}{% endif %}</td>
                         <td>{{ log.original_filename or '-' }}</td>
                         <td><span class="badge-inactive">{{ log.action }}</span></td>
                     </tr>
