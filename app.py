@@ -4,11 +4,13 @@ import mysql.connector
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime, timedelta
+import re
 from flask import Flask, render_template, request, redirect, url_for, flash, session, abort, Response
 from cryptography.fernet import Fernet, InvalidToken
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_wtf.csrf import CSRFProtect
+from markupsafe import escape
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'docguard-super-secret-key-2026')
@@ -134,6 +136,23 @@ def decrypt_file_data(encrypted_data):
 
 def get_client_ip():
     return request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
+
+def is_valid_email(email):
+    """Validate email format and allow common/education domains for DocGuard."""
+    if not email or len(email) > 150:
+        return False
+
+    pattern = r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
+    if re.match(pattern, email) is None:
+        return False
+
+    domain = email.split('@', 1)[1].lower()
+    allowed_suffixes = ('.com', '.net', '.org', '.my', '.edu', '.edu.my', '.gov.my')
+    return domain.endswith(allowed_suffixes)
+
+def clean_text(value):
+    """Escape user input to reduce script injection/XSS risk before storing/displaying."""
+    return str(escape((value or '').strip()))
 
 def get_login_key(email):
     return f"{get_client_ip()}:{email}"
@@ -281,9 +300,13 @@ def reset_admin():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        full_name = request.form['full_name'].strip()
+        full_name = clean_text(request.form['full_name'])
         email = request.form['email'].strip().lower()
         password = request.form['password']
+
+        if not is_valid_email(email):
+            flash('Please enter a valid email address.', 'danger')
+            return redirect(url_for('register'))
         
         existing = fetch_one("SELECT id FROM users WHERE email = %s", (email,))
         if existing:
@@ -313,6 +336,10 @@ def login():
         email = request.form['email'].strip().lower()
         password = request.form['password']
         ip = get_client_ip()
+
+        if not is_valid_email(email):
+            flash('Please enter a valid email address.', 'danger')
+            return redirect(url_for('login'))
 
         locked, remaining_seconds = is_login_locked(email)
         if locked:
@@ -537,11 +564,21 @@ def shared_access(token):
 
     # STEP 1: Recipient verification form submission
     if request.method == 'POST' and request.form.get('step') == 'recipient':
-        recipient_name = request.form.get('recipient_name', '').strip()
+        recipient_name = clean_text(request.form.get('recipient_name', ''))
         recipient_email = request.form.get('recipient_email', '').strip().lower()
 
         if not recipient_name or not recipient_email:
             flash('Please enter your name and email.', 'danger')
+            return render_template(
+                'shared_access.html',
+                link=link,
+                error=None,
+                require_recipient=True,
+                require_password=False
+            )
+
+        if not is_valid_email(recipient_email):
+            flash('Please enter a valid email address.', 'danger')
             return render_template(
                 'shared_access.html',
                 link=link,
@@ -833,7 +870,7 @@ def export_logs():
     
     si = StringIO()
     writer = csv.writer(si)
-    writer.writerow(['Date & Time', 'User', 'File', 'Action', 'Description', 'IP Address'])
+    writer.writerow(['Date & Time', 'User', 'File', 'Action', 'Description'])
     
     for log in logs:
         writer.writerow([
@@ -841,8 +878,7 @@ def export_logs():
             log['full_name'] or 'Public/Unknown',
             log['original_filename'] or '-',
             log['action'],
-            log['description'],
-            log['ip_address'] or '-'
+            log['description']
         ])
     
     output = si.getvalue()
