@@ -1,13 +1,13 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4 mobile-stack">
     <div class="page-header mb-0">
         <h1>My Share Links</h1>
         <p>Manage, copy, edit and revoke your shared document links</p>
     </div>
-    <div>
-        <button onclick="location.reload()" class="btn btn-outline-custom me-2">
+    <div class="mobile-actions">
+        <button onclick="location.reload()" class="btn btn-outline-custom">
             <i class="bi bi-arrow-repeat"></i> Refresh
         </button>
         <a href="{{ url_for('my_files') }}" class="btn btn-outline-custom">
@@ -36,7 +36,7 @@
                     {% for link in links %}
                     <tr id="link-{{ link.id }}">
                         <td><strong>{{ link.original_filename }}</strong></td>
-                        <td style="min-width: 360px;">
+                        <td class="link-column">
                             <div class="input-group input-group-sm">
                                 <input type="text" class="form-control form-modern" id="share-link-{{ link.id }}" value="{{ request.url_root.rstrip('/') }}/shared/{{ link.token }}" readonly>
                                 <button class="btn btn-primary-custom" type="button" onclick="copyShareLink('{{ link.id }}')">
@@ -61,7 +61,7 @@
                                 <span class="badge-inactive">Inactive</span>
                             {% endif %}
                         </td>
-                        <td style="min-width: 300px;">
+                        <td class="action-column">
                             <a href="{{ url_for('link_recipients', link_id=link.id) }}" class="btn btn-outline-custom btn-sm me-1">
                                 <i class="bi bi-people"></i> Recipients
                             </a>
