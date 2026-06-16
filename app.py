@@ -405,52 +405,80 @@ def google_login():
         flash('Google Authentication is not configured.', 'danger')
         return redirect(url_for('login'))
 
-    redirect_uri = os.environ.get(
-        'GOOGLE_REDIRECT_URI',
-        url_for('google_callback', _external=True)
-    )
+    # IMPORTANT: This must match Google Cloud Authorized redirect URI exactly.
+    redirect_uri = 'https://docguard-production.up.railway.app/google/callback'
     return google.authorize_redirect(redirect_uri)
 
 
 @app.route('/google/callback')
 def google_callback():
     try:
-        google.authorize_access_token()
+        token = google.authorize_access_token()
         user_info = google.get('https://openidconnect.googleapis.com/v1/userinfo').json()
 
         email = (user_info.get('email') or '').strip().lower()
         full_name = clean_text(user_info.get('name') or email.split('@')[0])
         ip = get_client_ip()
 
-        if not email or not is_valid_email(email):
+        if not email:
+            flash('Google login failed. Email not found.', 'danger')
+            return redirect(url_for('login'))
+
+        if not is_valid_email(email):
             flash('Google login failed. Invalid Google email address.', 'danger')
             return redirect(url_for('login'))
 
         user = fetch_one('SELECT * FROM users WHERE email=%s', (email,))
 
         if not user:
-            # A random password hash is stored so Google-created users still match the current users table structure.
-            # These users authenticate through Google OAuth instead of a local password.
-            password_hash = generate_password_hash(uuid.uuid4().hex, method='pbkdf2:sha256:600000')
-            execute_query(
-                """
-                INSERT INTO users (full_name, email, password_hash, role, is_active)
-                VALUES (%s, %s, %s, 'user', 1)
-                """,
-                (full_name, email, password_hash)
+            password_hash = generate_password_hash(
+                uuid.uuid4().hex,
+                method='pbkdf2:sha256:600000'
             )
+
+            database_url = os.environ.get('DATABASE_URL')
+            if database_url:
+                execute_query(
+                    """
+                    INSERT INTO users (full_name, email, password_hash, role, is_active)
+                    VALUES (%s, %s, %s, 'user', 1)
+                    RETURNING id
+                    """,
+                    (full_name, email, password_hash)
+                )
+            else:
+                execute_query(
+                    """
+                    INSERT INTO users (full_name, email, password_hash, role, is_active)
+                    VALUES (%s, %s, %s, 'user', 1)
+                    """,
+                    (full_name, email, password_hash)
+                )
+
             user = fetch_one('SELECT * FROM users WHERE email=%s', (email,))
-            add_log(user['id'], None, 'USER_REGISTERED', f'Google account created for {email}', ip)
+
+        if not user:
+            flash('Google login failed. User account was not created.', 'danger')
+            return redirect(url_for('login'))
 
         if int(user.get('is_active', 0)) != 1:
             flash('Your account is inactive. Please contact admin.', 'danger')
             return redirect(url_for('login'))
 
+        session.clear()
         session['user_id'] = user['id']
         session['full_name'] = user['full_name']
+        session['email'] = user['email']
         session['role'] = user['role']
 
-        add_log(user['id'], None, 'LOGIN_SUCCESS', 'Google login successful.', ip)
+        add_log(
+            user['id'],
+            None,
+            'LOGIN_SUCCESS',
+            f'Google login successful for {email}.',
+            ip
+        )
+
         flash('Logged in successfully with Google.', 'success')
 
         if user['role'] == 'admin':
@@ -459,8 +487,10 @@ def google_callback():
         return redirect(url_for('dashboard'))
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f'Google Auth Error: {e}')
-        flash('Google login failed. Please try again.', 'danger')
+        flash(f'Google login failed: {str(e)}', 'danger')
         return redirect(url_for('login'))
 
 
