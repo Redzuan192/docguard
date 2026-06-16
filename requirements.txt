@@ -6,3 +6,5 @@ werkzeug
 flask-wtf
 gunicorn
 psycopg2-binary
+Authlib
+requests

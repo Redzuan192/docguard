@@ -11,10 +11,26 @@ from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_wtf.csrf import CSRFProtect
 from markupsafe import escape
+from authlib.integrations.flask_client import OAuth
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'docguard-super-secret-key-2026')
 csrf = CSRFProtect(app)
+
+# =====================
+# GOOGLE OAUTH CONFIGURATION
+# =====================
+oauth = OAuth(app)
+
+google = oauth.register(
+    name='google',
+    client_id=os.environ.get('GOOGLE_CLIENT_ID'),
+    client_secret=os.environ.get('GOOGLE_CLIENT_SECRET'),
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={
+        'scope': 'openid email profile'
+    }
+)
 
 # =====================
 # CSRF ERROR HANDLER
@@ -378,6 +394,75 @@ def login():
         return redirect(url_for('login'))
     
     return render_template('login.html')
+
+
+@app.route('/login/google')
+def google_login():
+    if is_logged_in():
+        return redirect(url_for('home'))
+
+    if not os.environ.get('GOOGLE_CLIENT_ID') or not os.environ.get('GOOGLE_CLIENT_SECRET'):
+        flash('Google Authentication is not configured.', 'danger')
+        return redirect(url_for('login'))
+
+    redirect_uri = os.environ.get(
+        'GOOGLE_REDIRECT_URI',
+        url_for('google_callback', _external=True)
+    )
+    return google.authorize_redirect(redirect_uri)
+
+
+@app.route('/google/callback')
+def google_callback():
+    try:
+        google.authorize_access_token()
+        user_info = google.get('https://openidconnect.googleapis.com/v1/userinfo').json()
+
+        email = (user_info.get('email') or '').strip().lower()
+        full_name = clean_text(user_info.get('name') or email.split('@')[0])
+        ip = get_client_ip()
+
+        if not email or not is_valid_email(email):
+            flash('Google login failed. Invalid Google email address.', 'danger')
+            return redirect(url_for('login'))
+
+        user = fetch_one('SELECT * FROM users WHERE email=%s', (email,))
+
+        if not user:
+            # A random password hash is stored so Google-created users still match the current users table structure.
+            # These users authenticate through Google OAuth instead of a local password.
+            password_hash = generate_password_hash(uuid.uuid4().hex, method='pbkdf2:sha256:600000')
+            execute_query(
+                """
+                INSERT INTO users (full_name, email, password_hash, role, is_active)
+                VALUES (%s, %s, %s, 'user', 1)
+                """,
+                (full_name, email, password_hash)
+            )
+            user = fetch_one('SELECT * FROM users WHERE email=%s', (email,))
+            add_log(user['id'], None, 'USER_REGISTERED', f'Google account created for {email}', ip)
+
+        if int(user.get('is_active', 0)) != 1:
+            flash('Your account is inactive. Please contact admin.', 'danger')
+            return redirect(url_for('login'))
+
+        session['user_id'] = user['id']
+        session['full_name'] = user['full_name']
+        session['role'] = user['role']
+
+        add_log(user['id'], None, 'LOGIN_SUCCESS', 'Google login successful.', ip)
+        flash('Logged in successfully with Google.', 'success')
+
+        if user['role'] == 'admin':
+            return redirect(url_for('admin_dashboard'))
+
+        return redirect(url_for('dashboard'))
+
+    except Exception as e:
+        print(f'Google Auth Error: {e}')
+        flash('Google login failed. Please try again.', 'danger')
+        return redirect(url_for('login'))
+
 
 @app.route('/')
 def home():
