@@ -14,93 +14,61 @@ body {
 .table td {
     vertical-align: middle;
 }
-/* ===== Modern Branding ===== */
-
-.brand-icon {
-    width: 42px;
-    height: 42px;
-    border-radius: 12px;
-    background: linear-gradient(
-        135deg,
-        #2563eb,
-        #1d4ed8
-    );
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    color: white;
-    box-shadow: 0 10px 20px rgba(37,99,235,.25);
+body {
+    background: #f4f7fb;
 }
 
-.brand-title {
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: #1e293b;
-    line-height: 1.1;
+.card {
+    border-radius: 14px;
 }
 
-.brand-subtitle {
-    color: #64748b;
-    font-size: .7rem;
+.navbar-brand {
+    letter-spacing: 0.5px;
 }
 
-.login-logo {
-    width: 90px;
-    height: 90px;
-    border-radius: 24px;
-
-    background: linear-gradient(
-        135deg,
-        #2563eb,
-        #1d4ed8
-    );
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    color: white;
-    font-size: 2.4rem;
-
-    box-shadow: 0 15px 30px rgba(37,99,235,.25);
+.table th,
+.table td {
+    vertical-align: middle;
 }
 
-/* Hover effect */
 
+/* ==========================
+   Hover & Click Effects
+========================== */
+
+.btn,
 .btn-primary-custom,
 .btn-outline-custom,
 .btn-danger-custom,
-.btn-success-custom {
-    transition: all .25s ease;
+.btn-success-custom,
+.nav-link,
+.dropdown-item,
+.card-modern,
+.stat-card {
+    transition: all 0.2s ease;
 }
 
+.btn:hover,
 .btn-primary-custom:hover,
 .btn-outline-custom:hover,
 .btn-danger-custom:hover,
-.btn-success-custom:hover {
+.btn-success-custom:hover,
+.nav-link:hover,
+.dropdown-item:hover,
+.card-modern:hover,
+.stat-card:hover {
     transform: translateY(-2px);
 }
 
-/* Card animation */
-
-.card-modern,
-.stat-card {
-    transition: all .25s ease;
-}
-
-.card-modern:hover,
-.stat-card:hover {
-    transform: translateY(-4px);
-}
-
-/* Input effect */
-
-.form-modern {
-    transition: all .25s ease;
-}
-
-.form-modern:focus {
-    transform: translateY(-1px);
+.btn:active,
+.btn-primary-custom:active,
+.btn-outline-custom:active,
+.btn-danger-custom:active,
+.btn-success-custom:active,
+.nav-link:active,
+.dropdown-item:active,
+.card-modern:active,
+.stat-card:active {
+    transform: scale(0.96);
+    filter: brightness(0.95);
 }
