@@ -1,74 +1,120 @@
-body {
-    background: #f4f7fb;
-}
-
-.card {
-    border-radius: 14px;
-}
-
-.navbar-brand {
-    letter-spacing: 0.5px;
-}
-
-.table th,
-.table td {
-    vertical-align: middle;
-}
-body {
-    background: #f4f7fb;
-}
-
-.card {
-    border-radius: 14px;
-}
-
-.navbar-brand {
-    letter-spacing: 0.5px;
-}
-
-.table th,
-.table td {
-    vertical-align: middle;
-}
-
-
 /* ==========================
-   Hover & Click Effects
+   DocGuard Visual Upgrade
 ========================== */
 
+body {
+    background:
+        radial-gradient(circle at top left, rgba(59,130,246,0.12), transparent 35%),
+        linear-gradient(135deg, #f8fbff 0%, #eef4ff 100%);
+}
+
+/* Navbar lebih premium */
+.navbar {
+    background: rgba(255,255,255,0.95) !important;
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(226,232,240,0.8);
+}
+
+/* Brand icon kekal shield tapi nampak hidup */
+.navbar-brand i {
+    background: linear-gradient(135deg, #2563eb, #1e40af);
+    color: white !important;
+    padding: 9px;
+    border-radius: 12px;
+    box-shadow: 0 8px 18px rgba(37,99,235,0.25);
+}
+
+/* Page header */
+.page-header {
+    background: linear-gradient(135deg, #ffffff, #eff6ff);
+    padding: 1.5rem;
+    border-radius: 18px;
+    border: 1px solid #dbeafe;
+    box-shadow: 0 8px 24px rgba(15,23,42,0.05);
+}
+
+/* Card nampak tak kosong */
+.card-modern,
+.stat-card {
+    background: rgba(255,255,255,0.95);
+    border: 1px solid #e0ecff;
+    box-shadow: 0 8px 22px rgba(15,23,42,0.06);
+    transition: all 0.25s ease;
+}
+
+.card-modern:hover,
+.stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 16px 35px rgba(37,99,235,0.15);
+    border-color: #93c5fd;
+}
+
+/* Icon dalam stat card */
+.stat-icon {
+    background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+    color: #1d4ed8;
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Button hover/click effect */
 .btn,
 .btn-primary-custom,
 .btn-outline-custom,
 .btn-danger-custom,
-.btn-success-custom,
-.nav-link,
-.dropdown-item,
-.card-modern,
-.stat-card {
-    transition: all 0.2s ease;
+.btn-success-custom {
+    transition: all 0.22s ease;
 }
 
 .btn:hover,
 .btn-primary-custom:hover,
 .btn-outline-custom:hover,
 .btn-danger-custom:hover,
-.btn-success-custom:hover,
-.nav-link:hover,
-.dropdown-item:hover,
-.card-modern:hover,
-.stat-card:hover {
+.btn-success-custom:hover {
     transform: translateY(-2px);
+    box-shadow: 0 10px 22px rgba(37,99,235,0.22);
 }
 
 .btn:active,
 .btn-primary-custom:active,
 .btn-outline-custom:active,
 .btn-danger-custom:active,
-.btn-success-custom:active,
-.nav-link:active,
-.dropdown-item:active,
-.card-modern:active,
-.stat-card:active {
+.btn-success-custom:active {
     transform: scale(0.96);
-    filter: brightness(0.95);
+}
+
+/* Table lebih cantik */
+.table-modern th {
+    background: linear-gradient(135deg, #eff6ff, #f8fafc);
+}
+
+.table-modern tr:hover td {
+    background: #f0f7ff;
+}
+
+/* Input focus effect */
+.form-modern:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 4px rgba(37,99,235,0.12);
+    transform: translateY(-1px);
+}
+
+/* Badge lebih soft */
+.badge-active {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.badge-inactive {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.badge-warning {
+    background: #fef3c7;
+    color: #92400e;
 }
