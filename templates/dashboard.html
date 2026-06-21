@@ -1,28 +1,34 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="page-header">
-    <h1>Welcome back, {{ session.full_name }}!</h1>
-    <p>Manage and share your documents securely</p>
+<div class="page-header hero-card">
+    <div>
+        <span class="eyebrow">DocGuard Workspace</span>
+        <h1>Welcome back, {{ session.full_name }}! <span class="wave">👋</span></h1>
+        <p>Manage encrypted files, generate secure links, and monitor document access in one place.</p>
+    </div>
+    <div class="hero-visual d-none d-md-flex">
+        <i class="bi bi-shield-lock-fill"></i>
+    </div>
 </div>
 
 <!-- Stats Cards -->
 <div class="row g-3 g-md-4 mb-4 mb-md-5">
     <div class="col-6 col-md-4">
-        <div class="stat-card">
+        <div class="stat-card stat-blue">
             <div class="stat-icon"><i class="bi bi-folder"></i></div>
             <div class="stat-number">{{ stats.my_files.total }}</div>
             <div class="stat-label">Total Files</div>
         </div>
     </div>
     <div class="col-6 col-md-4">
-        <div class="stat-card">
+        <div class="stat-card stat-green">
             <div class="stat-icon"><i class="bi bi-link"></i></div>
             <div class="stat-number">{{ stats.my_links.total }}</div>
             <div class="stat-label">Share Links</div>
         </div>
     </div>
     <div class="col-6 col-md-4">
-        <div class="stat-card">
+        <div class="stat-card stat-purple">
             <div class="stat-icon"><i class="bi bi-eye"></i></div>
             <div class="stat-number">{{ stats.my_views.total }}</div>
             <div class="stat-label">Total Views</div>
@@ -34,7 +40,7 @@
     <div class="col-lg-6">
         <div class="card-modern">
             <div class="card-header bg-transparent border-bottom-0 pt-4 px-4">
-                <h5 class="mb-0 fw-semibold" style="font-size: 0.9rem;">Recent Files</h5>
+                <h5 class="section-title mb-0"><i class="bi bi-folder2-open"></i> Recent Files</h5>
             </div>
             <div class="card-body p-4 pt-0">
                 {% if recent_files %}
@@ -63,7 +69,7 @@
     <div class="col-lg-6">
         <div class="card-modern">
             <div class="card-header bg-transparent border-bottom-0 pt-4 px-4">
-                <h5 class="mb-0 fw-semibold" style="font-size: 0.9rem;">Recent Share Links</h5>
+                <h5 class="section-title mb-0"><i class="bi bi-link-45deg"></i> Recent Share Links</h5>
             </div>
             <div class="card-body p-4 pt-0">
                 {% if recent_links %}

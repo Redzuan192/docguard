@@ -1,35 +1,41 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="page-header">
-    <h1>Admin Dashboard</h1>
-    <p>Monitor and manage the entire system</p>
+<div class="page-header hero-card admin-hero">
+    <div>
+        <span class="eyebrow">Admin Control Center</span>
+        <h1>Admin Dashboard</h1>
+        <p>Monitor users, files, share links, and security activities from a centralized dashboard.</p>
+    </div>
+    <div class="hero-visual d-none d-md-flex">
+        <i class="bi bi-speedometer2"></i>
+    </div>
 </div>
 
 <!-- Stats Cards -->
 <div class="row g-4 mb-5">
     <div class="col-md-3">
-        <div class="stat-card">
+        <div class="stat-card stat-blue">
             <div class="stat-icon"><i class="bi bi-people"></i></div>
             <div class="stat-number">{{ total_users.total }}</div>
             <div class="stat-label">Total Users</div>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="stat-card">
+        <div class="stat-card stat-indigo">
             <div class="stat-icon"><i class="bi bi-folder"></i></div>
             <div class="stat-number">{{ total_files.total }}</div>
             <div class="stat-label">Total Files</div>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="stat-card">
+        <div class="stat-card stat-green">
             <div class="stat-icon"><i class="bi bi-link"></i></div>
             <div class="stat-number">{{ total_links.total }}</div>
             <div class="stat-label">Share Links</div>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="stat-card">
+        <div class="stat-card stat-orange">
             <div class="stat-icon"><i class="bi bi-journal-text"></i></div>
             <div class="stat-number">{{ total_logs.total }}</div>
             <div class="stat-label">Audit Logs</div>
@@ -39,7 +45,7 @@
 
 <div class="card-modern">
     <div class="card-header bg-transparent border-bottom-0 pt-4 px-4">
-        <h5 class="mb-0 fw-semibold" style="font-size: 0.9rem;">Recent Activity</h5>
+        <h5 class="section-title mb-0"><i class="bi bi-activity"></i> Recent Activity</h5>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
