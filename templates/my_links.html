@@ -43,7 +43,6 @@
                                     <i class="bi bi-clipboard"></i> Copy
                                 </button>
                             </div>
-                            <small class="text-muted">Token: {{ link.token[:20] }}...</small>
                         </td>
                         <td>{{ link.expiry_date.strftime('%d %b %Y, %H:%M') if link.expiry_date else 'N/A' }}</td>
                         <td class="views-count" id="views-{{ link.id }}">
