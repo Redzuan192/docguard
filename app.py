@@ -391,7 +391,6 @@ def google_login():
     if not os.environ.get('GOOGLE_CLIENT_ID') or not os.environ.get('GOOGLE_CLIENT_SECRET'):
         flash('Google Authentication is not configured.', 'danger')
         return redirect(url_for('login'))
-
     redirect_uri = 'https://docguard-production.up.railway.app/google/callback'
     return google.authorize_redirect(redirect_uri)
 
@@ -657,11 +656,9 @@ def shared_access(token):
     if int(link['used_views']) >= int(link['max_views']):
         return render_template('shared_access.html', error='Maximum Views Reached', link=None)
 
-   
     recipient_key = f"recipient_{token}"
     password_key = f"password_verified_{token}"
 
-   
     if request.method == 'POST' and request.form.get('step') == 'recipient':
         recipient_name = clean_text(request.form.get('recipient_name', ''))
         recipient_email = request.form.get('recipient_email', '').strip().lower()
@@ -691,7 +688,6 @@ def shared_access(token):
             'email': recipient_email
         }
 
-        
         execute_query("""
             INSERT INTO link_recipients (link_id, full_name, email)
             VALUES (%s, %s, %s)
@@ -705,7 +701,6 @@ def shared_access(token):
             get_client_ip()
         )
 
-       
         if link.get('password_hash'):
             return render_template(
                 'shared_access.html',
@@ -715,7 +710,6 @@ def shared_access(token):
                 require_password=True
             )
 
-   
     if recipient_key not in session:
         return render_template(
             'shared_access.html',
@@ -725,7 +719,6 @@ def shared_access(token):
             require_password=False
         )
 
-    
     password_hash = link.get('password_hash')
     if password_hash and password_key not in session:
         if request.method == 'POST' and request.form.get('step') == 'password':
@@ -748,7 +741,6 @@ def shared_access(token):
                 require_password=True
             )
 
-  
     current_views = int(link['used_views']) if link['used_views'] is not None else 0
     new_views = current_views + 1
     execute_query(
