@@ -17,9 +17,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'docguard-super-secret-key-2026')
 csrf = CSRFProtect(app)
 
-# =====================
-# GOOGLE OAUTH CONFIGURATION
-# =====================
+
 oauth = OAuth(app)
 
 google = oauth.register(
@@ -32,9 +30,7 @@ google = oauth.register(
     }
 )
 
-# =====================
-# CSRF ERROR HANDLER
-# =====================
+
 @app.errorhandler(400)
 def csrf_error(e):
     if 'CSRF' in str(e):
@@ -42,20 +38,17 @@ def csrf_error(e):
         return redirect(request.referrer or url_for('home'))
     return e
 
-# =====================
-# KONFIGURASI
-# =====================
+
 UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# File encryption key. In production/Railway, set FILE_ENCRYPTION_KEY in environment variables.
-# For local development, the system will read encryption_key.key or create one automatically.
+
 ENCRYPTION_KEY_FILE = os.environ.get('ENCRYPTION_KEY_FILE', 'encryption_key.key')
 
 ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'png', 'jpg', 'jpeg'}
 MAX_FILE_SIZE = 16 * 1024 * 1024
 
-# Login rate limiting configuration: 3 failed attempts = 2 minutes lock.
+
 MAX_LOGIN_ATTEMPTS = 3
 LOGIN_LOCKOUT_MINUTES = 2
 login_attempts = {}
@@ -63,9 +56,7 @@ login_attempts = {}
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# =====================
-# DATABASE CONNECTION
-# =====================
+
 def get_connection():
     database_url = os.environ.get('DATABASE_URL')
     if database_url:
@@ -125,9 +116,7 @@ def execute_query(query, params=None):
         cursor.close()
         conn.close()
 
-# =====================
-# FUNGSI PEMBANTU
-# =====================
+
 def load_encryption_key():
     key = os.environ.get('FILE_ENCRYPTION_KEY')
     if key:
@@ -211,7 +200,6 @@ def generate_token():
 def unique_filename(filename):
     safe_name = secure_filename(filename)
     ext = safe_name.rsplit('.', 1)[1].lower() if '.' in safe_name else ''
-    # Store encrypted files with .enc extension so the UI can show encryption status clearly.
     return f"{uuid.uuid4().hex}.{ext}.enc" if ext else f"{uuid.uuid4().hex}.enc"
 
 def is_logged_in():
@@ -259,7 +247,6 @@ def extract_recipient_display_name(description):
     for prefix in prefixes:
         if description.startswith(prefix):
             value = description[len(prefix):]
-            # Expected format: Name (email): filename or Name (email) for filename
             if ' (' in value:
                 name = value.split(' (', 1)[0].strip()
                 return name or 'Recipient'
@@ -405,7 +392,6 @@ def google_login():
         flash('Google Authentication is not configured.', 'danger')
         return redirect(url_for('login'))
 
-    # IMPORTANT: This must match Google Cloud Authorized redirect URI exactly.
     redirect_uri = 'https://docguard-production.up.railway.app/google/callback'
     return google.authorize_redirect(redirect_uri)
 
@@ -597,9 +583,7 @@ def delete_file(file_id):
     flash('File deleted successfully.', 'success')
     return redirect(url_for('my_files'))
 
-# =====================
-# ROUTES - SHARING
-# =====================
+
 @app.route('/share/<int:file_id>', methods=['GET', 'POST'])
 def share_file(file_id):
     if not is_logged_in(): 
@@ -673,11 +657,11 @@ def shared_access(token):
     if int(link['used_views']) >= int(link['max_views']):
         return render_template('shared_access.html', error='Maximum Views Reached', link=None)
 
-    # Every shared link access must identify the recipient first.
+   
     recipient_key = f"recipient_{token}"
     password_key = f"password_verified_{token}"
 
-    # STEP 1: Recipient verification form submission
+   
     if request.method == 'POST' and request.form.get('step') == 'recipient':
         recipient_name = clean_text(request.form.get('recipient_name', ''))
         recipient_email = request.form.get('recipient_email', '').strip().lower()
@@ -707,7 +691,7 @@ def shared_access(token):
             'email': recipient_email
         }
 
-        # Store recipient identity for document-owner monitoring.
+        
         execute_query("""
             INSERT INTO link_recipients (link_id, full_name, email)
             VALUES (%s, %s, %s)
@@ -721,7 +705,7 @@ def shared_access(token):
             get_client_ip()
         )
 
-        # If this link has a password, continue to password step after recipient registration.
+       
         if link.get('password_hash'):
             return render_template(
                 'shared_access.html',
@@ -731,7 +715,7 @@ def shared_access(token):
                 require_password=True
             )
 
-    # Force recipient registration before viewing the file.
+   
     if recipient_key not in session:
         return render_template(
             'shared_access.html',
@@ -741,7 +725,7 @@ def shared_access(token):
             require_password=False
         )
 
-    # STEP 2: Password verification if the sharing link is password protected.
+    
     password_hash = link.get('password_hash')
     if password_hash and password_key not in session:
         if request.method == 'POST' and request.form.get('step') == 'password':
@@ -764,7 +748,7 @@ def shared_access(token):
                 require_password=True
             )
 
-    # STEP 3: Access granted. Count the view and write audit log.
+  
     current_views = int(link['used_views']) if link['used_views'] is not None else 0
     new_views = current_views + 1
     execute_query(
@@ -845,9 +829,7 @@ def download_shared_file(token):
     response.headers['Content-Disposition'] = f'attachment; filename="{link["original_filename"]}"'
     return response
 
-# =====================
-# ROUTES - MANAGE SHARE LINKS
-# =====================
+
 @app.route('/my-links')
 def my_links():
     if not is_logged_in():
@@ -947,9 +929,7 @@ def cancel_link(link_id):
     flash('Share link has been revoked/cancelled.', 'success')
     return redirect(url_for('my_links'))
 
-# =====================
-# ROUTES - EXPORT
-# =====================
+
 @app.route('/admin/export-logs')
 def export_logs():
     if not is_logged_in() or not is_admin():
@@ -1005,9 +985,7 @@ def export_logs():
     
     return response
 
-# =====================
-# ROUTES - ADMIN
-# =====================
+
 @app.route('/admin')
 def admin_dashboard():
     if not is_logged_in() or not is_admin(): 
